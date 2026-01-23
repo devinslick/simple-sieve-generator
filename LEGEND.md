@@ -40,8 +40,11 @@ A combination of characters that determine what happens when the pattern matches
 *   `Fx1`: Expire + FileInto + Stop
 
 **From Rules:**
-*   `from:FRS` (or just `from:FR`): Read + FileInto + Stop
+*   `from:F`: Default (FileInto + Stop) - *Moves email and Stops.*
+*   `from:MRS` (or `from:FR`): Read + FileInto + Stop - *Note: `FR` acts as `FRS` (Stop) for senders.*
+*   `from:FRA`: Read + FileInto + Archive - *Continues processing.*
 *   `from:FRAS`: Read + FileInto + Archive + Stop
+*   `from:Fx1`: Expire + FileInto + Stop
 *   `from:B`: Reject / Bounce
 
 ### 4. PATTERN (Required)
