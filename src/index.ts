@@ -146,20 +146,29 @@ app.get('/', (c) => {
           }
 
           async function renderGenerator() {
-            // Fetch templates for dropdown
-            const res = await fetch('/api/templates');
-            const templates = await res.json();
+            // Fetch templates AND lists for dropdowns
+            const [tRes, lRes] = await Promise.all([
+               fetch('/api/templates'),
+               fetch('/api/lists')
+            ]);
+            
+            const templates = await tRes.json();
+            const lists = await lRes.json();
+            window.availableLists = lists; // Store for helper
             
             const app = document.getElementById('app');
             app.innerHTML = \`
               <h2>Generate Sieve Script</h2>
               <div>
                 <label>Template:</label><br>
-                <select id="genTemplate">
+                <select id="genTemplate" onchange="scanTemplate()">
                   \${templates.map(t => \`<option value="\${t}">\${t}</option>\`).join('')}
                 </select>
               </div>
               <br>
+              <div id="templateConfig" style="background:#f9f9f9; padding:10px; margin-bottom:10px; border:1px solid #ddd;">
+                Loading template config...
+              </div>
               <div>
                 <label>Rule Name:</label><br>
                 <input type="text" id="genRuleName" placeholder="e.g. Bills">
@@ -167,13 +176,68 @@ app.get('/', (c) => {
               <br>
               <button onclick="generateScript()">Generate</button>
               <br><br>
+              <div id="genLogs" style="font-family:monospace; font-size: 0.8em; color: #555; background: #f0f0f0; padding: 5px; border: 1px solid #ccc; max-height: 100px; overflow-y: auto;">Ready.</div>
+              <br>
               <textarea id="genOutput" placeholder="Generated script will appear here..."></textarea>
             \`;
+            
+            // Initial scan
+            if (templates.length > 0) setTimeout(scanTemplate, 100);
+          }
+          
+          async function scanTemplate() {
+            const templateName = document.getElementById('genTemplate').value;
+            const configDiv = document.getElementById('templateConfig');
+            configDiv.innerHTML = 'Scanning template variables...';
+            
+            try {
+                const res = await fetch('/api/templates/' + templateName);
+                const content = await res.text();
+                
+                const regex = /\{\{\s*LIST:([\w\-\/]+)(?::(\w+))?\s*\}\}/g;
+                const required = new Set();
+                let match;
+                while ((match = regex.exec(content)) !== null) {
+                    required.add(match[1]);
+                }
+                
+                if (required.size === 0) {
+                    configDiv.innerHTML = '<p>No list variables found in this template.</p>';
+                    return;
+                }
+                
+                let html = '<h3>Map Template Variables to Lists</h3><table style="width:100%">';
+                required.forEach(reqName => {
+                    html += \`<tr><td style="padding:5px;">\${reqName}:</td><td style="padding:5px;"><select id="map-\${reqName}" style="width:100%">\`;
+                    html += '<option value="">-- Select List --</option>';
+                    
+                    window.availableLists.forEach(listName => {
+                        // Auto-select if the list name matches the placeholder name exactly
+                        const selected = listName === reqName ? 'selected' : '';
+                        html += \`<option value="\${listName}" \${selected}>\${listName}</option>\`;
+                    });
+                    
+                    html += '</select></td></tr>';
+                });
+                html += '</table>';
+                configDiv.innerHTML = html;
+                
+            } catch (e) {
+                configDiv.innerHTML = '<span style="color:red">Error scanning template: ' + e.message + '</span>';
+            }
           }
 
           async function generateScript() {
             const templateName = document.getElementById('genTemplate').value;
             const ruleName = document.getElementById('genRuleName').value;
+            const logArea = document.getElementById('genLogs');
+            
+            const log = (msg) => {
+               logArea.innerHTML += '<div>' + new Date().toLocaleTimeString() + ': ' + msg + '</div>';
+               logArea.scrollTop = logArea.scrollHeight;
+            };
+
+            logArea.innerHTML = 'Starting generation...';
             
             if (!templateName || !ruleName) {
               alert('Please select a template and enter a rule name.');
@@ -184,56 +248,76 @@ app.get('/', (c) => {
               // 1. Fetch Template
               const tRes = await fetch(\`/api/templates/\${templateName}\`);
               let content = await tRes.text();
+              log('Template loaded (' + content.length + ' chars).');
 
-              // 2. Identify Lists
-              const regex = /\{\{LIST:([\\w\\-\\/]+)(?::(\\w+))?\}\}/g;
+              // 2. Identify Mappings
+              const regex = /\{\{\s*LIST:([\w\-\/]+)(?::(\w+))?\s*\}\}/g;
               const requiredLists = new Set();
               let match;
               while ((match = regex.exec(content)) !== null) {
                 requiredLists.add(match[1]);
               }
+              
+              const mappings = {};
+              requiredLists.forEach(tagName => {
+                  const select = document.getElementById('map-' + tagName);
+                  if (select && select.value) {
+                      mappings[tagName] = select.value;
+                  } else {
+                      mappings[tagName] = tagName; // Fallback
+                      log('Warning: No list mapped for "' + tagName + '", using tag name.');
+                  }
+              });
 
               // 3. Fetch Lists
+              const uniqueActualLists = new Set(Object.values(mappings));
               const listCache = {};
-              for (const listName of requiredLists) {
+              
+              for (const listName of uniqueActualLists) {
                 const lRes = await fetch(\`/api/lists/\${listName}\`);
                 if (lRes.ok) {
                    const text = await lRes.text();
-                   // Split by newlines and filter empty
-                   listCache[listName] = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+                   const items = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+                   listCache[listName] = items;
+                   log('Loaded list "' + listName + '" (' + items.length + ' items).');
                 } else {
                    listCache[listName] = []; 
+                   log('Warning: List "' + listName + '" NOT FOUND or empty.');
                 }
               }
 
               // 4. Replace Tags
-              content = content.replace(regex, (m, listName, mode) => {
-                 let items = listCache[listName] || [];
+              regex.lastIndex = 0; 
+              content = content.replace(regex, (m, tagName, mode) => {
+                 const actualListName = mappings[tagName];
+                 let items = listCache[actualListName] || [];
+                 const originalCount = items.length;
                  
                  // Mode filtering
                  if (mode === 'contains') {
-                   // Filter items that DO NOT contain wildcards
                    items = items.filter(i => !i.includes('*') && !i.includes('?'));
                  } else if (mode === 'matches') {
-                    // Filter items that DO contain wildcards
                    items = items.filter(i => i.includes('*') || i.includes('?'));
                  }
                  
-                 if (items.length === 0) return '"__IGNORE__"';
+                 if (items.length === 0) {
+                    if (originalCount > 0) log('List "' + actualListName + '" filtered to 0 items by mode "' + mode + '". using __IGNORE__.');
+                    return '"__IGNORE__"';
+                 }
                  
-                 // Quote and join
                  return items.map(i => \`"\${i.replace(/"/g, '\\\\"')}"\`).join(', ');
               });
+              log('Tags replaced.');
 
               // 5. Replace Rule Name
-              // Title Case
               const titleCase = ruleName.replace(/\\w\\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
               content = content.replace(/\{\{RULE_NAME\}\}/g, titleCase);
               content = content.replace(/\{\{RULE_NAME_LOWER\}\}/g, ruleName.toLowerCase());
 
               document.getElementById('genOutput').value = content;
+              log('Done.');
             } catch (e) {
-              alert('Error generating script: ' + e.message);
+              log('Error: ' + e.message);
               console.error(e);
             }
           }
