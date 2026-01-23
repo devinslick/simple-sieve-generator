@@ -1,0 +1,24 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Inject KV Namespace IDs
+        run: |
+          sed -i 's/SIEVE_DATA_ID/${{ secrets.SIEVE_DATA_ID }}/g' wrangler.toml
+          sed -i 's/SIEVE_DATA_PREVIEW_ID/${{ secrets.SIEVE_DATA_PREVIEW_ID }}/g' wrangler.toml
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

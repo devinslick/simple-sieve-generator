@@ -1,0 +1,16 @@
+name = "simple-sieve-generator"
+compatibility_date = "2024-01-01"
+
+# KV Namespace definitions
+# Note: IDs are injected via CI/CD
+[[kv_namespaces]]
+binding = "SIEVE_DATA"
+id = "SIEVE_DATA_ID"
+preview_id = "SIEVE_DATA_PREVIEW_ID"
+
+[vars]
+# Environment variables
+
+# Deployment
+[triggers]
+crons = []
