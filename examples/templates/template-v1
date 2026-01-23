@@ -73,7 +73,7 @@ if anyof (
   header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-reject:contains}}],
   header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-reject:matches}}]
 ) {
-  reject "This message was rejected by the {{RULE_NAME}} filter.";
+  reject "This message was rejected by the mail delivery system.";
   stop;
 }
 
@@ -131,7 +131,7 @@ if anyof (
   address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:global-from-reject:contains}}],
   address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:global-from-reject:matches}}]
 ) {
-  reject "This message was rejected by the {{RULE_NAME}} filter.";
+  reject "This message was rejected by the mail delivery system.";
   stop;
 }
 
@@ -203,7 +203,7 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-reject:contains}}],
       header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-reject:matches}}]
     ) {
-      reject "This message was rejected by the {{RULE_NAME}} filter.";
+      reject "This message was rejected by the mail delivery system.";
       stop;
     }
 
@@ -261,7 +261,7 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:scoped-from-reject:contains}}],
       address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:scoped-from-reject:matches}}]
     ) {
-      reject "This message was rejected by the {{RULE_NAME}} filter.";
+      reject "This message was rejected by the mail delivery system.";
       stop;
     }
 }
