@@ -15,11 +15,16 @@ This project is a Cloudflare Worker application built with Hono and TypeScript. 
 - **Cloudflare KV**: Key-Value storage used to store lists and templates.
 - **Wrangler**: CLI for development and deployment.
 
+## Security & Configuration Policy
+- **NO SECRETS IN CODE**: Never commit API keys, tokens, or specific resource IDs (like KV Namespace IDs) to the repository.
+- **GitHub Secrets**: All configuration values must be injected via GitHub Secrets during the CI/CD process.
+- **Wrangler Config**: `wrangler.toml` must use placeholders or environment variable references (e.g., `id = "SIEVE_DATA_ID"`) that are replaced at build time.
+
 ## Development Workflow
 1.  **Context**: Always check `package.json` and `wrangler.toml` to understand the environment.
 2.  **KV Storage**: The app relies on `SIEVE_DATA` binding. When adding features that store data, ensure the KV logic in `src/index.ts` handles it correctly (keys, values).
 3.  **Frontend**: The frontend is currently a simple string literal in `src/index.ts`. If requests become complex, consider separating it, but for now, keep it simple within the worker response.
-4.  **Deployment**: Changes pushed to `main` are deployed via GitHub Actions. Do not commit secrets/tokens.
+4.  **Deployment**: Changes pushed to `main` are deployed via GitHub Actions. **ENSURE no configuration values are hardcoded.**
 
 ## Future Roadmap (Todo)
 - **Template Management**: Ability to create and link (sieve rule <-> template).
