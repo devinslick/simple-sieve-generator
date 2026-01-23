@@ -147,25 +147,25 @@ app.get('/', (c) => {
                   <p><strong>3. ACTION:</strong> Maps to template variable suffixes.</p>
                   <table border="1" style="border-collapse:collapse; width:100%; margin-bottom:10px;">
                     <tr style="background:#eee;"><th>Code</th><th>Effect</th><th>Variable Suffix</th></tr>
-                    <tr><td><code>F</code></td><td>FileInto / Default</td><td><code>*-default</code></td></tr>
-                    <tr><td><code>FS</code></td><td>Mark as Seen (was FR)</td><td><code>*-seen</code></td></tr>
-                    <tr><td><code>FSS</code></td><td>Seen + Stop (was FRS)</td><td><code>*-seen-stop</code></td></tr>
-                    <tr><td><code>FSA</code></td><td>Seen + Archive (was FRA)</td><td><code>*-seen-archive</code></td></tr>
-                    <tr><td><code>FSAS</code></td><td>Seen + Archive + Stop</td><td><code>*-seen-archive-stop</code></td></tr>
+                    <tr><td><code>F</code>, <code>S</code></td><td>FileInto / Stop</td><td><code>*-default</code></td></tr>
+                    <tr><td><code>FR</code></td><td>Mark as Read</td><td><code>*-read</code></td></tr>
+                    <tr><td><code>FRS</code></td><td>Read + Stop</td><td><code>*-read-stop</code></td></tr>
+                    <tr><td><code>FRA</code></td><td>Read + Archive</td><td><code>*-read-archive</code></td></tr>
+                    <tr><td><code>FRAS</code></td><td>Read + Archive + Stop</td><td><code>*-read-archive-stop</code></td></tr>
                     <tr><td><code>Fx1</code></td><td>Expire in 1 day</td><td><code>*-expire</code></td></tr>
-                    <tr><td><code>R</code></td><td>Reject (New)</td><td><code>*-reject</code></td></tr>
+                    <tr><td><code>B</code></td><td>Bounce (Reject)</td><td><code>*-reject</code></td></tr>
                   </table>
                   
                   <h4>Examples:</h4>
                   <ul>
                     <li><code>F Text</code> &rarr; <code>global-subject-default</code></li>
-                    <li><code>FS Text</code> &rarr; <code>global-subject-seen</code></li>
-                    <li><code>!FSA Text</code> &rarr; <code>scoped-subject-seen-archive</code></li>
-                    <li><code>from:FSS user@ex.com</code> &rarr; <code>global-from-seen-stop</code></li>
-                    <li><code>R bad-spam</code> &rarr; <code>global-subject-reject</code></li>
+                    <li><code>FR Text</code> &rarr; <code>global-subject-read</code></li>
+                    <li><code>!FRA Text</code> &rarr; <code>scoped-subject-read-archive</code></li>
+                    <li><code>from:FRS user@ex.com</code> &rarr; <code>global-from-read-stop</code></li>
+                    <li><code>B bad-spam</code> &rarr; <code>global-subject-reject</code></li>
                   </ul>
                   
-                  <p><em>Use these variable names (e.g. <code>{{LIST:global-subject-seen}}</code>) in your templates.</em></p>
+                  <p><em>Use these variable names (e.g. <code>{{LIST:global-subject-read}}</code>) in your templates.</em></p>
                 </div>
               </details>
             \` : '';
@@ -280,34 +280,28 @@ app.get('/', (c) => {
                  let consumedCode = false;
                  
                  // Mapping Codes to Bucket Suffixes
-                 // Suffixes: default, seen (was read), seen-stop, seen-archive, seen-archive-stop, expire, reject
-                 if (['F', 'Stop', '>'].includes(code)) {
+                 // Suffixes: default, read, read-stop, read-archive, read-archive-stop, expire, reject
+                 if (['F', 'Stop', 'S', '>'].includes(code)) {
                      bucketSuffix = 'default';
                      consumedCode = true;
-                 } else if (code === 'FS') {
-                     // Was FR (File Seen/Read)
-                     // Context-dependent mapping based on template usage
-                     // Subject: template distinguishes read vs read-stop?
-                     // From: template usually only has read-stop. 
-                     bucketSuffix = 'seen';
-                     if (type === 'from') bucketSuffix = 'seen-stop'; 
-                 } else if (code === 'FSS') {
-                     // Was FRS (File Seen Stop)
-                     bucketSuffix = 'seen-stop';
+                 } else if (code === 'FR') {
+                     // Read
+                     bucketSuffix = 'read';
+                     if (type === 'from') bucketSuffix = 'read-stop'; 
+                 } else if (code === 'FRS') {
+                     bucketSuffix = 'read-stop';
                      consumedCode = true;
-                 } else if (code === 'FSA') {
-                     // Was FRA (File Seen Archive)
-                     bucketSuffix = 'seen-archive';
+                 } else if (code === 'FRA') {
+                     bucketSuffix = 'read-archive';
                      consumedCode = true;
-                 } else if (code === 'FSAS') {
-                     // Was FRAS (File Seen Archive Stop)
-                     bucketSuffix = 'seen-archive-stop';
+                 } else if (code === 'FRAS') {
+                     bucketSuffix = 'read-archive-stop';
                      consumedCode = true;
                  } else if (code === 'FX1') {
                      bucketSuffix = 'expire';
                      consumedCode = true;
-                 } else if (code === 'R') {
-                     // New: Reject
+                 } else if (code === 'B') {
+                     // New: Bounce (Reject)
                      bucketSuffix = 'reject';
                      consumedCode = true;
                  }
