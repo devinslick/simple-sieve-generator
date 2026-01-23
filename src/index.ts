@@ -184,7 +184,89 @@ app.get('/', (c) => {
             \`;
           }
           
-          // No scanTemplate needed anymore
+          // --- DSL Parsing Logic ---
+          function parseRulesList(rawText) {
+             const buckets = {};
+             const lines = rawText.split('\n');
+             
+             for (let line of lines) {
+                 line = line.trim();
+                 if (!line || line.startsWith('#')) continue;
+                 
+                 let scope = 'global';
+                 let type = 'subject';
+                 let bucketSuffix = 'default';
+                 
+                 // 1. Consume Scope '!'
+                 if (line.startsWith('!')) {
+                     scope = 'scoped';
+                     line = line.substring(1).trim();
+                 } else if (line.startsWith('global ')) {
+                     // explicit global? valid per some legends
+                     scope = 'global'; 
+                     line = line.substring(7).trim();
+                 }
+                 
+                 // 2. Consume Type 'from:'
+                 if (line.toLowerCase().startsWith('from:')) {
+                     type = 'from';
+                     line = line.substring(5).trim();
+                 }
+                 
+                 // 3. Consume Action Code
+                 // We split by space to get the first token
+                 const parts = line.split(/\s+/);
+                 const code = parts[0].toUpperCase();
+                 let consumedCode = false;
+                 
+                 // Mapping Codes to Bucket Suffixes
+                 // Suffixes: default, read, read-stop, read-archive, read-archive-stop, expire
+                 if (['F', 'S', '>'].includes(code)) {
+                     bucketSuffix = 'default';
+                     consumedCode = true;
+                 } else if (code === 'FR') {
+                     // Context-dependent mapping based on template usage
+                     // Subject: template distinguishes read vs read-stop?
+                     // From: template usually only has read-stop. 
+                     // Let's map strict:
+                     bucketSuffix = 'read';
+                     // Correction for 'from' where 'read' variable might not exist? 
+                     // Template checks will handle empty list if we map it wrong? 
+                     // No, we must map it to where the template looks.
+                     if (type === 'from') bucketSuffix = 'read-stop'; 
+                 } else if (code === 'FRS') {
+                     bucketSuffix = 'read-stop';
+                     consumedCode = true;
+                 } else if (code === 'FRA') {
+                     bucketSuffix = 'read-archive';
+                     consumedCode = true;
+                 } else if (code === 'FRAS') {
+                     bucketSuffix = 'read-archive-stop';
+                     consumedCode = true;
+                 } else if (code === 'FX1') {
+                     bucketSuffix = 'expire';
+                     consumedCode = true;
+                 }
+                 
+                 // If we consumed a code, remove it from line
+                 // If NOT consumed (e.g. pattern started with "Financial"), bucketSuffix stays 'default'
+                 // But wait, what if pattern is 'FR'? Unlikely.
+                 // We only consume if we matched a known code.
+                 
+                 if (consumedCode) {
+                    // Remove first token
+                    line = line.substring(parts[0].length).trim();
+                 }
+                 
+                 // 4. Construct Bucket Key
+                 const key = scope + '-' + type + '-' + bucketSuffix;
+                 
+                 if (!buckets[key]) buckets[key] = [];
+                 buckets[key].push(line);
+             }
+             
+             return buckets;
+          }
 
           async function generateScript() {
             const templateName = document.getElementById('genTemplate').value;
@@ -218,29 +300,43 @@ app.get('/', (c) => {
               }
               
               const requiredArr = Array.from(requiredLists);
-              log('Template requires ' + requiredArr.length + ' variables: ' + requiredArr.join(', '));
+              log('Template requires ' + requiredArr.length + ' variables.');
 
-              // 3. Fetch Lists (Smart Resolution)
+              // 3. Parse Main Rule List (The DSL File)
+              let parsedBuckets = {};
+              try {
+                  const mainListRes = await fetch(\`/api/lists/\${encodeURIComponent(ruleName)}\`);
+                  if (mainListRes.ok) {
+                      const text = await mainListRes.text();
+                      parsedBuckets = parseRulesList(text);
+                      const keyCount = Object.keys(parsedBuckets).length;
+                      const itemCount = Object.values(parsedBuckets).reduce((a,b) => a + b.length, 0);
+                      log(\`Parsed Rule List '\${ruleName}': \${itemCount} items in \${keyCount} categories.\`);
+                  } else {
+                      log(\`Rule List '\${ruleName}' not found. Will rely on sub-lists/globals only.\`);
+                  }
+              } catch (err) {
+                  log('Error parsing rule list: ' + err.message);
+              }
+
+              // 4. Fetch/Resolve Lists
               const listCache = {};
               
-              // We need to fetch potential lists. 
-              // Strategy: Try fetching RuleName/VarName first, then VarName (fallback)
-              // To avoid N*2 requests, we can just try to fetch RuleName/VarName.
-              // If the user wants Global lists, they should probably exist as 'global-list' in the system
-              // and the Template should reference 'global-list'.
-              // However, build.ps1 logic suggests:
-              // Rule specific bucket -> Global file
-              
               for (const varName of requiredLists) {
-                const specificKey = \`\${ruleName}/\${varName}\`;
+                // Priority 1: Parsed Bucket from Main List
+                if (parsedBuckets[varName] && parsedBuckets[varName].length > 0) {
+                    listCache[varName] = parsedBuckets[varName];
+                    log(\`Mapped '\${varName}' from parsed rule list.\`);
+                    continue; // Skip fetch
+                }
                 
-                // Try Specific
+                // Priority 2: Specific Rule/Var List
+                const specificKey = \`\${ruleName}/\${varName}\`;
                 let res = await fetch(\`/api/lists/\${encodeURIComponent(specificKey)}\`);
                 let usedKey = specificKey;
                 
+                // Priority 3: Global/Fallback List
                 if (!res.ok) {
-                    // Try Global/Fallback (Exact variable name)
-                    log(\`Specific list '\${specificKey}' not found. Checking global '\${varName}'...\`);
                     res = await fetch(\`/api/lists/\${encodeURIComponent(varName)}\`);
                     usedKey = varName;
                 }
@@ -249,14 +345,16 @@ app.get('/', (c) => {
                    const text = await res.text();
                    const items = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
                    listCache[varName] = items;
-                   log(\`Loaded data for '\${varName}' from '\${usedKey}' (\${items.length} items).\`);
+                   log(\`Loaded external data for '\${varName}' from '\${usedKey}'.\`);
                 } else {
                    listCache[varName] = []; 
-                   log(\`Warning: No data found for '\${varName}' (Checked '\${specificKey}' and '\${varName}').\`);
+                   // Only warn if we didn't find it in the bucket either
+                   // (Implicitly handled since we are here)
+                   // log(\`Warning: No data for '\${varName}'.\`);
                 }
               }
 
-              // 4. Replace Tags
+              // 5. Replace Tags
               regex.lastIndex = 0; 
               content = content.replace(regex, (m, varName, mode) => {
                  let items = listCache[varName] || [];
@@ -270,21 +368,20 @@ app.get('/', (c) => {
                  }
                  
                  if (items.length === 0) {
-                    if (originalCount > 0) log('Variable "' + varName + '" filtered to 0 items by mode "' + mode + '". using __IGNORE__.');
+                    // if (originalCount > 0) log('Variable "' + varName + '" filtered to 0 items by mode "' + mode + '". using __IGNORE__.');
                     return '"__IGNORE__"';
                  }
                  
                  return items.map(i => \`"\${i.replace(/"/g, '\\\\"')}"\`).join(', ');
               });
-              log('Tags replaced.');
+              log('Tags replaced. Done.');
 
-              // 5. Replace Rule Name
+              // 6. Replace Rule Name
               const titleCase = ruleName.replace(/\\w\\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
               content = content.replace(/\{\{RULE_NAME\}\}/g, titleCase);
               content = content.replace(/\{\{RULE_NAME_LOWER\}\}/g, ruleName.toLowerCase());
 
               document.getElementById('genOutput').value = content;
-              log('Done.');
             } catch (e) {
               log('Error: ' + e.message);
               console.error(e);
