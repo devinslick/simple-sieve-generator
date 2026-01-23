@@ -44,15 +44,21 @@ app.get('/', (c) => {
             const app = document.getElementById('app');
             app.innerHTML = '<p>Loading...</p>';
             
-            if (view === 'generate') {
-              renderGenerator();
-            } else {
-              renderIndex(view);
+            try {
+              if (view === 'generate') {
+                await renderGenerator();
+              } else {
+                await renderIndex(view);
+              }
+            } catch (e) {
+              app.innerHTML = '<p style="color:red">Error loading view: ' + e.message + '</p>';
+              console.error(e);
             }
           }
 
           async function renderIndex(type) {
             const res = await fetch(\`/api/\${type}\`);
+            if (!res.ok) throw new Error(\`Failed to fetch \${type}: \${res.status} \${res.statusText}\`);
             const items = await res.json();
             const app = document.getElementById('app');
             
@@ -200,9 +206,13 @@ app.get('/', (c) => {
       </body>
     </html>
   `)
-})
-
-// API Routes
+})try {
+    const list = await c.env.SIEVE_DATA.list({ prefix })
+    // Remove prefix for the client
+    return c.json(list.keys.map((k: any) => k.name.substring(prefix.length)))
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500)
+  }
 
 // Helper to list keys by prefix
 async function listKeys(c: any, prefix: string) {
