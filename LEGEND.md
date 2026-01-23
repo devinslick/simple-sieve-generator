@@ -49,6 +49,14 @@ The text to match against the header.
 - **Wildcards**: If the pattern contains `*` or `?`, the system automatically uses the Sieve `:matches` comparator.
 - **Literal**: If no wildcards are present, the system uses the Sieve `:contains` comparator.
 
+### 5. ALIAS MAPPING (Special)
+Defines a list of aliased addresses that should target this rule folder using `X-Original-To`. This is specific to the `default` template.
+
+*   **Syntax**: `!alias1,alias2,...!CODE [PATTERN]`
+*   **Example**: `!auto,credit,receipts!FRAS *`
+    *   **Meaning**: If email is sent to `auto` OR `credit` OR `receipts`, apply action `FRAS`.
+    *   **Note**: The **PATTERN** is currently ignored for Alias rules. These rules are designed for **Mailbox Routing**, meaning they route *all* mail sent to the specified aliases, effectively treating the pattern as `*` (Match All).
+
 ## Examples
 
 | Rule Line | Explanation |

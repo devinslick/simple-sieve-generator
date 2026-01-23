@@ -1,0 +1,99 @@
+# Template: default
+# {{RULE_NAME}}
+
+require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
+
+# Generated: Do not run this script on spam messages
+if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value "ge" :comparator "i;ascii-numeric" "${1}") {
+    return;
+}
+
+# --- ALIAS RULES ---
+
+# 1. Aliases | Default (F)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-default:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-default:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "{{RULE_NAME}}";
+}
+
+# 2. Aliases | Read (FR)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-read:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-read:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "{{RULE_NAME}}";
+  addflag "\\Seen";
+}
+
+# 3. Aliases | Read Stop (FRS)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-read-stop:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-read-stop:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "{{RULE_NAME}}";
+  addflag "\\Seen";
+  stop;
+}
+
+# 4. Aliases | Read Archive (FRA)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-read-archive:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-read-archive:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "{{RULE_NAME}}";
+  addflag "\\Seen";
+  fileinto "archive";
+}
+
+# 5. Aliases | Read Archive Stop (FRAS)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-read-archive-stop:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-read-archive-stop:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "{{RULE_NAME}}";
+  addflag "\\Seen";
+  fileinto "archive";
+  stop;
+}
+
+# 6. Aliases | Expire (Fx1)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-expire:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-expire:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "{{RULE_NAME}}";
+  expire "day" "1";
+  stop;
+}
+
+# 7. Aliases | Bounce/Reject (B)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-reject:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-reject:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  reject "This message was rejected by the mail delivery system.";
+  stop;
+}

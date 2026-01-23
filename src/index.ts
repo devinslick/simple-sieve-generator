@@ -254,6 +254,28 @@ app.get('/', (c) => {
              for (let line of lines) {
                  line = line.trim();
                  if (!line || line.startsWith('#')) continue;
+
+                 // 0. Check for Alias List Syntax: !alias1,alias2!CODE Pattern
+                 // Example: !auto,credit!FRAS *
+                 const aliasMatch = line.match(/^!([^!]+)!([a-zA-Z0-9]+)(?:\s+.*)?$/);
+                 if (aliasMatch) {
+                     const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
+                     const code = aliasMatch[2].toUpperCase();
+                     let suffix = 'default';
+                     
+                     if (['F', 'STOP', 'S', '>'].includes(code)) suffix = 'default';
+                     else if (code === 'FR') suffix = 'read';
+                     else if (code === 'FRS') suffix = 'read-stop';
+                     else if (code === 'FRA') suffix = 'read-archive';
+                     else if (code === 'FRAS') suffix = 'read-archive-stop';
+                     else if (code === 'FX1') suffix = 'expire';
+                     else if (code === 'B') suffix = 'reject';
+                     
+                     const key = 'aliases-' + suffix;
+                     if (!buckets[key]) buckets[key] = [];
+                     buckets[key].push(...aliases);
+                     continue;
+                 }
                  
                  let scope = 'global';
                  let type = 'subject';
