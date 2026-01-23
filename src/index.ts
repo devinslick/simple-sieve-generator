@@ -36,6 +36,8 @@ app.get('/', (c) => {
         <div id="app">
           <p>Loading...</p>
         </div>
+        
+        <div style="position:fixed; bottom:5px; right:5px; font-size:10px; color:#aaa;">App Version: 1.3 (Bounce Support)</div>
 
         <script>
           window.onerror = function(msg, url, line, col, error) {
