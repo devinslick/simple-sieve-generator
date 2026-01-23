@@ -25,6 +25,7 @@ A combination of characters that determine what happens when the pattern matches
 | `R` | **Read** | Marks the email as seen (`\Seen`). |
 | `A` | **Archive** | Moves email to the `Archive` folder (and the Rule folder). |
 | `S` | **Stop** | Stops processing further Sieve scripts. |
+| `B` | **Bounce** | Rejects the message with an error. |
 | `x1` | **Expire** | Sets the email to expire in 1 day. |
 
 #### Supported Combinations (Buckets)
@@ -35,11 +36,13 @@ A combination of characters that determine what happens when the pattern matches
 *   `FRS`: Read + FileInto + Stop
 *   `FRA`: Read + FileInto + Archive + Stop
 *   `FRAS`: Read + FileInto + Archive + Stop
+*   `B`: Reject / Bounce
 *   `Fx1`: Expire + FileInto + Stop
 
 **From Rules:**
 *   `from:FRS` (or just `from:FR`): Read + FileInto + Stop
 *   `from:FRAS`: Read + FileInto + Archive + Stop
+*   `from:B`: Reject / Bounce
 
 ### 4. PATTERN (Required)
 The text to match against the header.
@@ -53,9 +56,11 @@ The text to match against the header.
 | `F Your Order Shipped` | **Global Subject**. Moves to folder if subject contains text. Stops. |
 | `FR Daily Digest` | **Global Subject**. Moves to folder, marks as **Read**. Stops. |
 | `FRAS Security Alert` | **Global Subject**. Moves to folder, marks **Read**, copies to **Archive**. Stops. |
+| `B Buy Now` | **Global Subject**. **Rejects/Bounces** the email. |
 | `from:FRS info@example.com` | **Global From**. Moves to folder if sender matches. Marks Read. Stops. |
 | `!F Local Only` | **Scoped Subject**. Moves to folder ONLY if sent specifically to this mailbox. |
 | `!from:FRAS bad-actor@spam` | **Scoped From**. Read/Archive/Stop ONLY if sent to this mailbox. |
+| `!B malicious-user` | **Scoped Subject**. **Rejects** if subject contains text, ONLY for this mailbox. |
 | `Fx1 Temporary Code` | **Global Subject**. Moves to folder, sets **Expire in 1 day**. |
 | `F *Verification*` | **Global Subject**. Uses `:matches` because of wildcards. |
 
