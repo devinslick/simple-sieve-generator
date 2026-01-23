@@ -478,7 +478,7 @@ app.get('/', (c) => {
                   // If yes, are ALL of them '["__IGNORE__"]'?
                   
                   // Count total list markers in this block (post-replacement)
-                  const listMatches = conditionBody.match(new RegExp('\\\\[(.*?)\\\\]', 'g'));
+                  const listMatches = conditionBody.match(new RegExp('\\\\\[(.*?)\\\\\]', 'g'));
                   
                   if (!listMatches) {
                       // No lists involved (e.g. spam check or simple header check), keep block
