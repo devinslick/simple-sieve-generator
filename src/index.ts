@@ -186,7 +186,7 @@ app.get('/', (c) => {
               let content = await tRes.text();
 
               // 2. Identify Lists
-              const regex = /\{\{LIST:([\w\-\/]+)(?::(\w+))?\}\}/g;
+              const regex = /\{\{LIST:([\\w\\-\\/]+)(?::(\\w+))?\}\}/g;
               const requiredLists = new Set();
               let match;
               while ((match = regex.exec(content)) !== null) {
