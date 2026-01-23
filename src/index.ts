@@ -504,7 +504,7 @@ app.get('/', (c) => {
               });
 
               // 7. Cleanup extra newlines
-              content = content.replace(/\n\s*\n\s*\n/g, '\n\n');
+              content = content.replace(/\\n\s*\\n\s*\\n/g, '\\n\\n');
 
               // 8. Replace Rule Name
               const titleCase = ruleName.replace(/\\w\\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
