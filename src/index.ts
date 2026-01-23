@@ -57,20 +57,43 @@ app.get('/', (c) => {
           }
 
           async function renderIndex(type) {
-            const res = await fetch(\`/api/\${type}\`);
-            if (!res.ok) throw new Error(\`Failed to fetch \${type}: \${res.status} \${res.statusText}\`);
-            const items = await res.json();
-            const app = document.getElementById('app');
-            
-            let html = \`<h2>Manage \${type === 'lists' ? 'Data Lists' : 'Templates'}</h2>\`;
-            html += '<ul>';
-            items.forEach(key => {
-              html += \`<li><a href="#" onclick="editItem('\${type}', '\${key}')">\${key}</a></li>\`;
-            });
-            html += '</ul>';
-            html += \`<button onclick="createItem('\${type}')">Create New \${type === 'lists' ? 'List' : 'Template'}</button>\`;
-            
-            app.innerHTML = html;
+             const app = document.getElementById('app');
+             app.innerHTML = '<p>Fetching data...</p>';
+             
+             // Timeout fetch after 10 seconds
+             const controller = new AbortController();
+             const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+            try {
+              const res = await fetch(\`/api/\${type}\`, { signal: controller.signal });
+              clearTimeout(timeoutId);
+
+              if (!res.ok) {
+                 const text = await res.text();
+                 throw new Error(\`Failed to fetch \${type}: \${res.status} \${res.statusText} - \${text}\`);
+              }
+              
+              const items = await res.json();
+              
+              let html = \`<h2>Manage \${type === 'lists' ? 'Data Lists' : 'Templates'}</h2>\`;
+              if (items.length === 0) {
+                 html += '<p>No items found.</p>';
+              } else {
+                html += '<ul>';
+                items.forEach(key => {
+                  html += \`<li><a href="#" onclick="editItem('\${type}', '\${key}')">\${key}</a></li>\`;
+                });
+                html += '</ul>';
+              }
+              html += \`<button onclick="createItem('\${type}')">Create New \${type === 'lists' ? 'List' : 'Template'}</button>\`;
+              
+              app.innerHTML = html;
+            } catch (e) {
+              clearTimeout(timeoutId);
+              let msg = e.message;
+              if (e.name === 'AbortError') msg = 'Request timed out. Check your internet connection or the server status.';
+              throw new Error(msg);
+            }
           }
 
           async function createItem(type) {
