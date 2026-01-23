@@ -146,9 +146,18 @@ app.get('/', (c) => {
           }
 
           async function renderGenerator() {
-            // Fetch templates only
-            const res = await fetch('/api/templates');
-            const templates = await res.json();
+            const [tRes, lRes] = await Promise.all([
+               fetch('/api/templates'),
+               fetch('/api/lists')
+            ]);
+            
+            const templates = await tRes.json();
+            const lists = await lRes.json();
+            
+            // Filter top-level lists (no slashes) for cleaner UI?
+            // User likely wants 'bills', not 'bills/foo'.
+            // Actually, showing all is safer, but highlighting simple names is better.
+            const sortedLists = lists.sort();
             
             const app = document.getElementById('app');
             app.innerHTML = \`
@@ -157,23 +166,25 @@ app.get('/', (c) => {
               <div style="background: #eef; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
                  <p style="margin-top:0"><strong>How to use:</strong></p>
                  <ol style="margin-bottom:0; padding-left: 20px;">
-                    <li>Create Lists named <code>RuleName/VariableName</code> (e.g. <code>Bills/subject-match</code>).</li>
-                    <li>Select a Template below.</li>
-                    <li>Enter the <strong>Rule Name</strong> (e.g. <code>Bills</code>).</li>
-                    <li>The generator will automatically find lists matching <code>RuleName/Variable</code>.</li>
+                    <li>Select the <strong>Source List</strong> (e.g. <code>bills</code>) containing your rules.</li>
+                    <li>Select the <strong>Template</strong> to use.</li>
+                    <li>The generator will parse the list and map variables automatically.</li>
                  </ol>
               </div>
 
+              <div>
+                <label>Source List:</label><br>
+                <select id="genList">
+                  <option value="">-- Select List --</option>
+                  \${sortedLists.map(l => \`<option value="\${l}">\${l}</option>\`).join('')}
+                </select>
+              </div>
+              <br>
               <div>
                 <label>Template:</label><br>
                 <select id="genTemplate">
                   \${templates.map(t => \`<option value="\${t}">\${t}</option>\`).join('')}
                 </select>
-              </div>
-              <br>
-              <div>
-                <label>Rule Name:</label><br>
-                <input type="text" id="genRuleName" placeholder="e.g. Bills">
               </div>
               <br>
               <button onclick="generateScript()">Generate</button>
@@ -270,7 +281,7 @@ app.get('/', (c) => {
 
           async function generateScript() {
             const templateName = document.getElementById('genTemplate').value;
-            const ruleName = document.getElementById('genRuleName').value.trim();
+            const ruleName = document.getElementById('genList').value;
             const logArea = document.getElementById('genLogs');
             
             const log = (msg) => {
@@ -281,7 +292,7 @@ app.get('/', (c) => {
             logArea.innerHTML = 'Starting generation...';
             
             if (!templateName || !ruleName) {
-              alert('Please select a template and enter a rule name.');
+              alert('Please select a list source and a template.');
               return;
             }
 
