@@ -459,7 +459,54 @@ app.get('/', (c) => {
               });
               log('Tags replaced. Done.');
 
-              // 6. Replace Rule Name
+              // 6. Prune Empty Rules
+              // Remove blocks where "__IGNORE__" is the only thing in the list strings, OR where the conditions are effectively empty.
+              // Logic: Look for `if anyof (...) { ... }` blocks.
+              // If ALL [{{LIST...}}] replacements inside the `anyof` resulted in `__IGNORE__` (or generated empty lists), we remove the block.
+              
+              const blockRegex = /(?:#.*?\n)?\s*if (?:anyof|allof)\s*\(([\s\S]*?)\)\s*\{[\s\S]*?\}/g;
+              content = content.replace(blockRegex, (fullBlock, conditionBody) => {
+                  // Check if the condition body contains ONLY "__IGNORE__" lists or empty lists
+                  // We do this by checking if there are ANY valid strings created.
+                  // The template generator produces `["A", "B"]` or `"__IGNORE__"`.
+                  
+                  // If the block contains at least one list that is NOT `["__IGNORE__"]` and NOT `""`, keep it.
+                  // Actually, our replace logic above returns `"__IGNORE__"` (singular string).
+                  // So we look for any list presence `[...]` that contains something other than `__IGNORE__`.
+                  
+                  // Simplest check: Does the condition body contain any list `[...]`?
+                  // If yes, are ALL of them `["__IGNORE__"]`?
+                  
+                  // Count total list markers in this block (post-replacement)
+                  const listMatches = conditionBody.match(/\[(.*?)\]/g);
+                  
+                  if (!listMatches) {
+                      // No lists involved (e.g. spam check or simple header check), keep block
+                      return fullBlock;
+                  }
+                  
+                  let hasActiveList = false;
+                  for (const listStr of listMatches) {
+                      // listStr is `["A", "B"]` or `["__IGNORE__"]`
+                      if (!listStr.includes('"__IGNORE__"')) {
+                          hasActiveList = true;
+                          break;
+                      }
+                  }
+                  
+                  if (!hasActiveList) {
+                      // All lists in this block were ignored.
+                      console.log('Pruning empty block.');
+                      return ''; 
+                  }
+                  
+                  return fullBlock;
+              });
+
+              // 7. Cleanup extra newlines
+              content = content.replace(/\n\s*\n\s*\n/g, '\n\n');
+
+              // 8. Replace Rule Name
               const titleCase = ruleName.replace(/\\w\\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
               content = content.replace(/\{\{RULE_NAME\}\}/g, titleCase);
               content = content.replace(/\{\{RULE_NAME_LOWER\}\}/g, ruleName.toLowerCase());
