@@ -123,12 +123,61 @@ app.get('/', (c) => {
             }
 
             const app = document.getElementById('app');
+            
+            const legendHtml = type === 'lists' ? \`
+              <br><br>
+              <details>
+                <summary style="cursor:pointer; font-weight:bold;">Show Rules Legend / DSL Syntax</summary>
+                <div style="background:#f9f9f9; padding:15px; border:1px solid #ddd; margin-top:10px; font-size:0.9em; line-height:1.4;">
+                  <h4>Syntax: <code>[SCOPE] [TYPE] [ACTION] [PATTERN]</code></h4>
+                  
+                  <p><strong>1. SCOPE:</strong> Where the rule applies.</p>
+                  <ul>
+                    <li>(None) = Global (All emails)</li>
+                    <li><code>!</code> = Scoped (Only specific mailbox, e.g. auto/alert)</li>
+                  </ul>
+
+                  <p><strong>2. TYPE:</strong> Header to check.</p>
+                  <ul>
+                    <li>(None) = Subject</li>
+                    <li><code>from:</code> = From header</li>
+                  </ul>
+
+                  <p><strong>3. ACTION:</strong></p>
+                  <table border="1" style="border-collapse:collapse; width:100%; margin-bottom:10px;">
+                    <tr style="background:#eee;"><th>Code</th><th>Effect</th></tr>
+                    <tr><td><code>F</code></td><td>FileInto (Move to folder)</td></tr>
+                    <tr><td><code>R</code></td><td>Mark as Read</td></tr>
+                    <tr><td><code>A</code></td><td>Archive (Copy to Archive)</td></tr>
+                    <tr><td><code>S</code></td><td>Stop processing</td></tr>
+                    <tr><td><code>x1</code></td><td>Expire in 1 day</td></tr>
+                  </table>
+                  <p><em>Combinations:</em> <code>FR</code>, <code>FRS</code>, <code>FRA</code>, <code>FRAS</code>, <code>Fx1</code></p>
+
+                  <p><strong>4. PATTERN:</strong> Text to match.</p>
+                  <ul>
+                    <li>If text has <code>*</code> or <code>?</code> -> Uses Wildcard Match</li>
+                    <li>Otherwise -> Uses "Contains"</li>
+                  </ul>
+                  
+                  <h4>Examples:</h4>
+                  <ul>
+                    <li><code>F Your Order Shipped</code> (Move if Subject contains text)</li>
+                    <li><code>FR Daily Digest</code> (Move + Mark Read)</li>
+                    <li><code>from:FRAS bad@actor.com</code> (Global From: Move+Read+Archive+Stop)</li>
+                    <li><code>!F Local Only</code> (Subject: Move only if addressed to this mailbox)</li>
+                  </ul>
+                </div>
+              </details>
+            \` : '';
+
             app.innerHTML = \`
               <h3>\${isNew ? 'Creating' : 'Editing'}: \${key}</h3>
               <textarea id="editorContent">\${content}</textarea><br><br>
               <button onclick="saveItem('\${type}', '\${key}')">Save</button>
               \${!isNew ? \`<button onclick="deleteItem('\${type}', '\${key}')" style="background-color: #ff4444; color: white;">Delete</button>\` : ''}
               <button onclick="setView('\${type}')">Back</button>
+              \${legendHtml}
             \`;
           }
 
@@ -189,9 +238,9 @@ app.get('/', (c) => {
               <br>
               <button onclick="generateScript()">Generate</button>
               <br><br>
-              <div id="genLogs" style="font-family:monospace; font-size: 0.8em; color: #555; background: #f0f0f0; padding: 5px; border: 1px solid #ccc; max-height: 200px; overflow-y: auto;">Ready.</div>
-              <br>
               <textarea id="genOutput" placeholder="Generated script will appear here..."></textarea>
+              <br><br>
+              <div id="genLogs" style="font-family:monospace; font-size: 0.8em; color: #555; background: #f0f0f0; padding: 5px; border: 1px solid #ccc; max-height: 200px; overflow-y: auto;">Ready.</div>
             \`;
           }
           
