@@ -455,7 +455,7 @@ app.get('/', (c) => {
                     return '"__IGNORE__"';
                  }
                  
-                 return items.map(i => \`"\${i.replace(/"/g, '\\\\"')}"\`).join(', ');
+                 return items.map(i => \`"\${i.replace(/"/g, '\\\\\\\\"')}"\`).join(', ');
               });
               log('Tags replaced. Done.');
 
