@@ -486,12 +486,27 @@ app.get('/', (c) => {
                   }
                   
                   let hasActiveList = false;
+                  
+                  // Static header lists that appear in templates but aren't user content variables
+                  const ignoredHeaders = new Set([
+                      '"From"', '"Subject"', '"To"', '"Cc"', '"Bcc"', 
+                      '"Sender"', '"Resent-From"', '"Date"'
+                  ]);
+
                   for (const listStr of listMatches) {
-                      // listStr is '["A", "B"]' or '["__IGNORE__"]'
-                      if (!listStr.includes('"__IGNORE__"')) {
-                          hasActiveList = true;
-                          break;
-                      }
+                      // listStr is '["A", "B"]' or '["__IGNORE__"]' or '["From"]'
+                      
+                      // 1. Check if this list was explicitly ignored (empty user variable)
+                      if (listStr.includes('"__IGNORE__"')) continue;
+
+                      // 2. Check if this is a static header list (e.g. ["From"])
+                      // Remove brackets and trim to check inner content
+                      const inner = listStr.replace(/^\[\s*|\s*\]$/g, '');
+                      if (ignoredHeaders.has(inner)) continue;
+
+                      // If we get here, it's a real list with valid content
+                      hasActiveList = true;
+                      break;
                   }
                   
                   if (!hasActiveList) {
