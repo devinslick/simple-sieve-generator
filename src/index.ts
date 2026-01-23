@@ -194,7 +194,7 @@ app.get('/', (c) => {
                 const res = await fetch('/api/templates/' + templateName);
                 const content = await res.text();
                 
-                const regex = /\{\{\s*LIST:([\w\-\/]+)(?::(\w+))?\s*\}\}/g;
+                const regex = /\{\{\s*LIST:([\\w\\-\\/]+)(?::(\\w+))?\s*\}\}/g;
                 const required = new Set();
                 let match;
                 while ((match = regex.exec(content)) !== null) {
@@ -251,7 +251,7 @@ app.get('/', (c) => {
               log('Template loaded (' + content.length + ' chars).');
 
               // 2. Identify Mappings
-              const regex = /\{\{\s*LIST:([\w\-\/]+)(?::(\w+))?\s*\}\}/g;
+              const regex = /\{\{\s*LIST:([\\w\\-\\/]+)(?::(\\w+))?\s*\}\}/g;
               const requiredLists = new Set();
               let match;
               while ((match = regex.exec(content)) !== null) {
