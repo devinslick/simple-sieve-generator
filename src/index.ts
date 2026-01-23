@@ -146,29 +146,31 @@ app.get('/', (c) => {
           }
 
           async function renderGenerator() {
-            // Fetch templates AND lists for dropdowns
-            const [tRes, lRes] = await Promise.all([
-               fetch('/api/templates'),
-               fetch('/api/lists')
-            ]);
-            
-            const templates = await tRes.json();
-            const lists = await lRes.json();
-            window.availableLists = lists; // Store for helper
+            // Fetch templates only
+            const res = await fetch('/api/templates');
+            const templates = await res.json();
             
             const app = document.getElementById('app');
             app.innerHTML = \`
               <h2>Generate Sieve Script</h2>
+              
+              <div style="background: #eef; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                 <p style="margin-top:0"><strong>How to use:</strong></p>
+                 <ol style="margin-bottom:0; padding-left: 20px;">
+                    <li>Create Lists named <code>RuleName/VariableName</code> (e.g. <code>Bills/subject-match</code>).</li>
+                    <li>Select a Template below.</li>
+                    <li>Enter the <strong>Rule Name</strong> (e.g. <code>Bills</code>).</li>
+                    <li>The generator will automatically find lists matching <code>RuleName/Variable</code>.</li>
+                 </ol>
+              </div>
+
               <div>
                 <label>Template:</label><br>
-                <select id="genTemplate" onchange="scanTemplate()">
+                <select id="genTemplate">
                   \${templates.map(t => \`<option value="\${t}">\${t}</option>\`).join('')}
                 </select>
               </div>
               <br>
-              <div id="templateConfig" style="background:#f9f9f9; padding:10px; margin-bottom:10px; border:1px solid #ddd;">
-                Loading template config...
-              </div>
               <div>
                 <label>Rule Name:</label><br>
                 <input type="text" id="genRuleName" placeholder="e.g. Bills">
@@ -176,60 +178,17 @@ app.get('/', (c) => {
               <br>
               <button onclick="generateScript()">Generate</button>
               <br><br>
-              <div id="genLogs" style="font-family:monospace; font-size: 0.8em; color: #555; background: #f0f0f0; padding: 5px; border: 1px solid #ccc; max-height: 100px; overflow-y: auto;">Ready.</div>
+              <div id="genLogs" style="font-family:monospace; font-size: 0.8em; color: #555; background: #f0f0f0; padding: 5px; border: 1px solid #ccc; max-height: 200px; overflow-y: auto;">Ready.</div>
               <br>
               <textarea id="genOutput" placeholder="Generated script will appear here..."></textarea>
             \`;
-            
-            // Initial scan
-            if (templates.length > 0) setTimeout(scanTemplate, 100);
           }
           
-          async function scanTemplate() {
-            const templateName = document.getElementById('genTemplate').value;
-            const configDiv = document.getElementById('templateConfig');
-            configDiv.innerHTML = 'Scanning template variables...';
-            
-            try {
-                const res = await fetch('/api/templates/' + templateName);
-                const content = await res.text();
-                
-                const regex = /\{\{\s*LIST:([\\w\\-\\/]+)(?::(\\w+))?\s*\}\}/g;
-                const required = new Set();
-                let match;
-                while ((match = regex.exec(content)) !== null) {
-                    required.add(match[1]);
-                }
-                
-                if (required.size === 0) {
-                    configDiv.innerHTML = '<p>No list variables found in this template.</p>';
-                    return;
-                }
-                
-                let html = '<h3>Map Template Variables to Lists</h3><table style="width:100%">';
-                required.forEach(reqName => {
-                    html += \`<tr><td style="padding:5px;">\${reqName}:</td><td style="padding:5px;"><select id="map-\${reqName}" style="width:100%">\`;
-                    html += '<option value="">-- Select List --</option>';
-                    
-                    window.availableLists.forEach(listName => {
-                        // Auto-select if the list name matches the placeholder name exactly
-                        const selected = listName === reqName ? 'selected' : '';
-                        html += \`<option value="\${listName}" \${selected}>\${listName}</option>\`;
-                    });
-                    
-                    html += '</select></td></tr>';
-                });
-                html += '</table>';
-                configDiv.innerHTML = html;
-                
-            } catch (e) {
-                configDiv.innerHTML = '<span style="color:red">Error scanning template: ' + e.message + '</span>';
-            }
-          }
+          // No scanTemplate needed anymore
 
           async function generateScript() {
             const templateName = document.getElementById('genTemplate').value;
-            const ruleName = document.getElementById('genRuleName').value;
+            const ruleName = document.getElementById('genRuleName').value.trim();
             const logArea = document.getElementById('genLogs');
             
             const log = (msg) => {
@@ -250,47 +209,57 @@ app.get('/', (c) => {
               let content = await tRes.text();
               log('Template loaded (' + content.length + ' chars).');
 
-              // 2. Identify Mappings
-              const regex = /\{\{\s*LIST:([\\w\\-\\/]+)(?::(\\w+))?\s*\}\}/g;
+              // 2. Identify Variables
+              const regex = /\{\{\s*LIST:([-a-zA-Z0-9_\\/]+)(?::([a-zA-Z0-9_]+))?\s*\}\}/g;
               const requiredLists = new Set();
               let match;
               while ((match = regex.exec(content)) !== null) {
                 requiredLists.add(match[1]);
               }
               
-              const mappings = {};
-              requiredLists.forEach(tagName => {
-                  const select = document.getElementById('map-' + tagName);
-                  if (select && select.value) {
-                      mappings[tagName] = select.value;
-                  } else {
-                      mappings[tagName] = tagName; // Fallback
-                      log('Warning: No list mapped for "' + tagName + '", using tag name.');
-                  }
-              });
+              const requiredArr = Array.from(requiredLists);
+              log('Template requires ' + requiredArr.length + ' variables: ' + requiredArr.join(', '));
 
-              // 3. Fetch Lists
-              const uniqueActualLists = new Set(Object.values(mappings));
+              // 3. Fetch Lists (Smart Resolution)
               const listCache = {};
               
-              for (const listName of uniqueActualLists) {
-                const lRes = await fetch(\`/api/lists/\${listName}\`);
-                if (lRes.ok) {
-                   const text = await lRes.text();
+              // We need to fetch potential lists. 
+              // Strategy: Try fetching RuleName/VarName first, then VarName (fallback)
+              // To avoid N*2 requests, we can just try to fetch RuleName/VarName.
+              // If the user wants Global lists, they should probably exist as 'global-list' in the system
+              // and the Template should reference 'global-list'.
+              // However, build.ps1 logic suggests:
+              // Rule specific bucket -> Global file
+              
+              for (const varName of requiredLists) {
+                const specificKey = \`\${ruleName}/\${varName}\`;
+                
+                // Try Specific
+                let res = await fetch(\`/api/lists/\${encodeURIComponent(specificKey)}\`);
+                let usedKey = specificKey;
+                
+                if (!res.ok) {
+                    // Try Global/Fallback (Exact variable name)
+                    log(\`Specific list '\${specificKey}' not found. Checking global '\${varName}'...\`);
+                    res = await fetch(\`/api/lists/\${encodeURIComponent(varName)}\`);
+                    usedKey = varName;
+                }
+                
+                if (res.ok) {
+                   const text = await res.text();
                    const items = text.split('\\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
-                   listCache[listName] = items;
-                   log('Loaded list "' + listName + '" (' + items.length + ' items).');
+                   listCache[varName] = items;
+                   log(\`Loaded data for '\${varName}' from '\${usedKey}' (\${items.length} items).\`);
                 } else {
-                   listCache[listName] = []; 
-                   log('Warning: List "' + listName + '" NOT FOUND or empty.');
+                   listCache[varName] = []; 
+                   log(\`Warning: No data found for '\${varName}' (Checked '\${specificKey}' and '\${varName}').\`);
                 }
               }
 
               // 4. Replace Tags
               regex.lastIndex = 0; 
-              content = content.replace(regex, (m, tagName, mode) => {
-                 const actualListName = mappings[tagName];
-                 let items = listCache[actualListName] || [];
+              content = content.replace(regex, (m, varName, mode) => {
+                 let items = listCache[varName] || [];
                  const originalCount = items.length;
                  
                  // Mode filtering
@@ -301,7 +270,7 @@ app.get('/', (c) => {
                  }
                  
                  if (items.length === 0) {
-                    if (originalCount > 0) log('List "' + actualListName + '" filtered to 0 items by mode "' + mode + '". using __IGNORE__.');
+                    if (originalCount > 0) log('Variable "' + varName + '" filtered to 0 items by mode "' + mode + '". using __IGNORE__.');
                     return '"__IGNORE__"';
                  }
                  
