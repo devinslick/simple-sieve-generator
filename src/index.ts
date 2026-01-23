@@ -461,21 +461,21 @@ app.get('/', (c) => {
 
               // 6. Prune Empty Rules
               // Remove blocks where "__IGNORE__" is the only thing in the list strings, OR where the conditions are effectively empty.
-              // Logic: Look for `if anyof (...) { ... }` blocks.
-              // If ALL [{{LIST...}}] replacements inside the `anyof` resulted in `__IGNORE__` (or generated empty lists), we remove the block.
+              // Logic: Look for 'if anyof (...) { ... }' blocks.
+              // If ALL [{{LIST...}}] replacements inside the 'anyof' resulted in '__IGNORE__' (or generated empty lists), we remove the block.
               
               const blockRegex = /(?:#.*?\n)?\s*if (?:anyof|allof)\s*\(([\s\S]*?)\)\s*\{[\s\S]*?\}/g;
               content = content.replace(blockRegex, (fullBlock, conditionBody) => {
                   // Check if the condition body contains ONLY "__IGNORE__" lists or empty lists
                   // We do this by checking if there are ANY valid strings created.
-                  // The template generator produces `["A", "B"]` or `"__IGNORE__"`.
+                  // The template generator produces '["A", "B"]' or '"__IGNORE__"'.
                   
-                  // If the block contains at least one list that is NOT `["__IGNORE__"]` and NOT `""`, keep it.
-                  // Actually, our replace logic above returns `"__IGNORE__"` (singular string).
-                  // So we look for any list presence `[...]` that contains something other than `__IGNORE__`.
+                  // If the block contains at least one list that is NOT '["__IGNORE__"]' and NOT '""', keep it.
+                  // Actually, our replace logic above returns '"__IGNORE__"' (singular string).
+                  // So we look for any list presence '[...]' that contains something other than '__IGNORE__'.
                   
-                  // Simplest check: Does the condition body contain any list `[...]`?
-                  // If yes, are ALL of them `["__IGNORE__"]`?
+                  // Simplest check: Does the condition body contain any list '[...]'?
+                  // If yes, are ALL of them '["__IGNORE__"]'?
                   
                   // Count total list markers in this block (post-replacement)
                   const listMatches = conditionBody.match(/\[(.*?)\]/g);
