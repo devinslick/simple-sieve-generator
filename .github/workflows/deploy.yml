@@ -31,7 +31,28 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler deploy
 
-      - name: Upload Standard Template
+      - name: Upload Examples
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler kv key put "template:comprehensive" --path="./examples/template" --namespace-id ${{ secrets.SIEVE_DATA_ID }} --remote
+        run: |
+          # Upload Templates
+          if [ -d "./examples/templates" ]; then
+            for file in ./examples/templates/*; do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                echo "Uploading template: $filename"
+                npx wrangler kv key put "template:$filename" --path="$file" --namespace-id ${{ secrets.SIEVE_DATA_ID }} --remote
+              fi
+            done
+          fi
+
+          # Upload Lists
+          if [ -d "./examples/lists" ]; then
+            for file in ./examples/lists/*; do
+              if [ -f "$file" ]; then
+                filename=$(basename "$file")
+                echo "Uploading list: $filename"
+                npx wrangler kv key put "list:$filename" --path="$file" --namespace-id ${{ secrets.SIEVE_DATA_ID }} --remote
+              fi
+            done
+          fi
