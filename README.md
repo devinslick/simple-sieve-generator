@@ -67,3 +67,4 @@ Once these are set, pushing to the `main` branch will automatically inject these
 ### Usage
 - Visit the app URL (e.g., `https://simple-sieve-generator.devin.workers.dev`).
 - Create/Edit lists (e.g., `exclusions/global.txt`) using the web UI.
+- Files within this repo under examples/lists and examples/templates will be automatically uploaded to your KV store on deployment.
