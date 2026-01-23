@@ -465,6 +465,7 @@ async function listKeys(c: any, prefix: string) {
   try {
     const list = await c.env.SIEVE_DATA.list({ prefix })
     // Remove prefix for the client
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
     return c.json(list.keys.map((k: any) => k.name.substring(prefix.length)))
   } catch (e: any) {
     return c.json({ error: e.message }, 500)
@@ -478,6 +479,7 @@ app.get('/api/lists/:key', async (c) => {
   const key = c.req.param('key')
   const val = await c.env.SIEVE_DATA.get('list:' + key)
   if (val === null) return c.notFound()
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
   return c.text(val)
 })
 
@@ -485,6 +487,7 @@ app.get('/api/templates/:key', async (c) => {
   const key = c.req.param('key')
   const val = await c.env.SIEVE_DATA.get('template:' + key)
   if (val === null) return c.notFound()
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
   return c.text(val)
 })
 
