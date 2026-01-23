@@ -1,4 +1,4 @@
-# Template: v3
+# Template: v1.0
 # {{RULE_NAME}}
 
 require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists"];
@@ -8,13 +8,9 @@ if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value 
     return;
 }
 
-# Guardian: Do not run if addressed to excluded mailboxes (e.g. new@, personal@)
-if allof (not header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:excluded-mailboxes:contains}}], header :contains "Delivered-To" ["@"])
-{
-
 # --- GLOBAL RULES ---
 
-# 1. F | Fileinto (Subject)
+# 1. Global | Subject | Default (F) - FileInto
 if anyof (
   header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-default:contains}}],
   header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-default:matches}}]
@@ -22,7 +18,7 @@ if anyof (
   fileinto "{{RULE_NAME}}";
 }
 
-# 2. FR | Fileinto + Read (Subject)
+# 2. Global | Subject | Read (FR) - FileInto + Seen
 if anyof (
   header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-read:contains}}],
   header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-read:matches}}]
@@ -31,7 +27,7 @@ if anyof (
   addflag "\\Seen";
 }
 
-# 3. FRS | Fileinto + Read + Stop (Subject)
+# 3. Global | Subject | Stop (S/FRS) - FileInto + Seen + Stop
 if anyof (
   header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-read-stop:contains}}],
   header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-read-stop:matches}}]
@@ -41,7 +37,7 @@ if anyof (
   stop;
 }
 
-# 4. FRA | Fileinto + Read + Archive (Subject)
+# 4. Global | Subject | Archive (FRA) - FileInto + Seen + Archive
 if anyof (
   header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-read-archive:contains}}],
   header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-read-archive:matches}}]
@@ -51,7 +47,7 @@ if anyof (
   fileinto "archive";
 }
 
-# 5. FRAS | Fileinto + Read + Archive + Stop (Subject)
+# 5. Global | Subject | Archive Stop (FRAS) - FileInto + Seen + Archive + Stop
 if anyof (
   header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-read-archive-stop:contains}}],
   header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-read-archive-stop:matches}}]
@@ -62,7 +58,26 @@ if anyof (
   stop;
 }
 
-# 6. from:FRS | Fileinto + Read + Stop (From)
+# 6. Global | Subject | Expire (Fx1) - FileInto + Expire
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-expire:contains}}],
+  header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-expire:matches}}]
+) {
+  fileinto "{{RULE_NAME}}";
+  expire "day" "1";
+  stop;
+}
+
+# 7. Global | From | Default (F)
+if anyof (
+  address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:global-from-default:contains}}],
+  address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:global-from-default:matches}}]
+) {
+  fileinto "{{RULE_NAME}}";
+}
+
+# 8. Global | From | Read/Stop (FR/FRS)
+# Note: DSL Parser maps 'from:FR' to 'read-stop'
 if anyof (
   address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:global-from-read-stop:contains}}],
   address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:global-from-read-stop:matches}}]
@@ -72,7 +87,17 @@ if anyof (
   stop;
 }
 
-# 7. from:FRAS | Fileinto + Read + Archive + Stop (From)
+# 9. Global | From | Archive (FRA)
+if anyof (
+  address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:global-from-read-archive:contains}}],
+  address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:global-from-read-archive:matches}}]
+) {
+  fileinto "{{RULE_NAME}}";
+  addflag "\\Seen";
+  fileinto "archive";
+}
+
+# 10. Global | From | Archive Stop (FRAS)
 if anyof (
   address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:global-from-read-archive-stop:contains}}],
   address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:global-from-read-archive-stop:matches}}]
@@ -83,20 +108,21 @@ if anyof (
   stop;
 }
 
-# 8. Fx1 | Fileinto + Expire 1 Day (Subject)
+# 11. Global | From | Expire (Fx1)
 if anyof (
-  header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:global-subject-expire:contains}}],
-  header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:global-subject-expire:matches}}]
+  address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:global-from-expire:contains}}],
+  address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:global-from-expire:matches}}]
 ) {
   fileinto "{{RULE_NAME}}";
   expire "day" "1";
   stop;
 }
 
-# --- SCOPED RULES (Applies only to mailbox: {{RULE_NAME}}) ---
+# --- SCOPED RULES ---
+# Applies only when delivered to: {{RULE_NAME_LOWER}}...
 if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
 
-    # 9. Scoped F | Fileinto (Subject)
+    # 12. Scoped | Subject | Default (!F)
     if anyof (
       header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-default:contains}}],
       header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-default:matches}}]
@@ -104,7 +130,7 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       fileinto "{{RULE_NAME}}";
     }
 
-    # 10. Scoped FR | Fileinto + Read (Subject)
+    # 13. Scoped | Subject | Read (!FR)
     if anyof (
       header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-read:contains}}],
       header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-read:matches}}]
@@ -113,7 +139,7 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       addflag "\\Seen";
     }
 
-    # 11. Scoped FRS | Fileinto + Read + Stop (Subject)
+    # 14. Scoped | Subject | Read Stop (!FRS)
     if anyof (
       header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-read-stop:contains}}],
       header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-read-stop:matches}}]
@@ -123,7 +149,7 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       stop;
     }
 
-    # 12. Scoped FRA | Fileinto + Read + Archive (Subject)
+    # 15. Scoped | Subject | Archive (!FRA)
     if anyof (
       header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-read-archive:contains}}],
       header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-read-archive:matches}}]
@@ -133,7 +159,7 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       fileinto "archive";
     }
 
-    # 13. Scoped FRAS | Fileinto + Read + Archive + Stop (Subject)
+    # 16. Scoped | Subject | Archive Stop (!FRAS)
     if anyof (
       header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-read-archive-stop:contains}}],
       header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-read-archive-stop:matches}}]
@@ -144,7 +170,25 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       stop;
     }
 
-    # 14. Scoped from:FRS | Fileinto + Read + Stop (From)
+    # 17. Scoped | Subject | Expire (!Fx1)
+    if anyof (
+      header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-expire:contains}}],
+      header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-expire:matches}}]
+    ) {
+      fileinto "{{RULE_NAME}}";
+      expire "day" "1";
+      stop;
+    }
+
+    # 18. Scoped | From | Default (! from:F)
+    if anyof (
+      address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:scoped-from-default:contains}}],
+      address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:scoped-from-default:matches}}]
+    ) {
+      fileinto "{{RULE_NAME}}";
+    }
+
+    # 19. Scoped | From | Read Stop (! from:FRS)
     if anyof (
       address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:scoped-from-read-stop:contains}}],
       address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:scoped-from-read-stop:matches}}]
@@ -154,7 +198,17 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       stop;
     }
 
-    # 15. Scoped from:FRAS | Fileinto + Read + Archive + Stop (From)
+    # 20. Scoped | From | Archive (! from:FRA)
+    if anyof (
+      address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:scoped-from-read-archive:contains}}],
+      address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:scoped-from-read-archive:matches}}]
+    ) {
+      fileinto "{{RULE_NAME}}";
+      addflag "\\Seen";
+      fileinto "archive";
+    }
+
+    # 21. Scoped | From | Archive Stop (! from:FRAS)
     if anyof (
       address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:scoped-from-read-archive-stop:contains}}],
       address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:scoped-from-read-archive-stop:matches}}]
@@ -165,15 +219,13 @@ if header :contains "X-Original-To" "{{RULE_NAME_LOWER}}" {
       stop;
     }
 
-    # 16. Scoped Fx1 | Fileinto + Expire 1 Day (Subject)
+    # 22. Scoped | From | Expire (! from:Fx1)
     if anyof (
-      header :comparator "i;unicode-casemap" :contains "Subject" [{{LIST:scoped-subject-expire:contains}}],
-      header :comparator "i;unicode-casemap" :matches "Subject" [{{LIST:scoped-subject-expire:matches}}]
+      address :all :comparator "i;unicode-casemap" :contains ["From"] [{{LIST:scoped-from-expire:contains}}],
+      address :all :comparator "i;unicode-casemap" :matches ["From"] [{{LIST:scoped-from-expire:matches}}]
     ) {
       fileinto "{{RULE_NAME}}";
       expire "day" "1";
       stop;
     }
-}
-
 }
