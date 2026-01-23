@@ -307,39 +307,9 @@ app.get('/', (c) => {
                      bucketSuffix = 'reject';
                      consumedCode = true;
                  }
-
-                 // Special case: S is ambiguous if it stands for Stop standalone or Seen standalone?
-                 // But in the previous logic: if (['F', 'S', '>'].includes(code))
-                 // This S meant 'Standard FileInto' or 'Stop' (Default).
-                 // We should keep S as Default mapping for backward compat if that was the intent, 
-                 // OR changes it to 'seen'? 
-                 // User said "Change R (Read) to S (Seen)".
-                 // If S was "Stop", we have a collision.
-                 // Legend said: S = Stop. F or S = Default.
-                 // If we now use S for Seen, we can't use S for Stop as a standalone code easily?
-                 // But usually codes are combined like FS, FSS.
-                 // If the user inputs just "S Subject", does it mean "Seen Subject" or "Stop Subject"?
-                 // Previous legend: S = Stop/Default.
-                 // New legend: S = Seen.
-                 // So "S Subject" -> Mark as Seen (and maybe file into default).
-                 // However, the specific code block handles `FS`, `FSS` etc.
-                 // We need to resolve the single letter `S`.
-                 // Let's remove S from the Default set if it now means Seen.
-                 // But if we want `S` to map to `seen`, we need to add:
-                  else if (code === 'S') { 
-                      bucketSuffix = 'seen'; 
-                      consumedCode = true; 
-                  }
-                 
-                 // However, "Stop" is usually implicit in FileInto default.
-                 // Let's assume the user uses FS, FSS, etc. mainly.
-                 // I will remove 'S' from the first check to avoid "Stop" confusion, 
-                 // assuming standard is F (File).
-
                  
                  // If we consumed a code, remove it from line
                  // If NOT consumed (e.g. pattern started with "Financial"), bucketSuffix stays 'default'
-                 // But wait, what if pattern is 'FR'? Unlikely.
                  // We only consume if we matched a known code.
                  
                  if (consumedCode) {
