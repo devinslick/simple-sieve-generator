@@ -79,7 +79,8 @@ app.get('/', (c) => {
              const timeoutId = setTimeout(() => controller.abort(), 10000);
 
             try {
-              const res = await fetch(\`/api/\${type}\`, { signal: controller.signal });
+              // Add timestamp to prevent browser caching
+              const res = await fetch(\`/api/\${type}?t=\${Date.now()}\`, { signal: controller.signal });
               clearTimeout(timeoutId);
 
               if (!res.ok) {
@@ -181,7 +182,8 @@ app.get('/', (c) => {
             const content = document.getElementById('editorContent').value;
             await fetch(\`/api/\${type}/\${key}\`, { method: 'PUT', body: content });
             alert('Saved!');
-            setView(type);
+            // Small delay to allow KV propagation
+            setTimeout(() => setView(type), 1000);
           }
 
           async function deleteItem(type, key) {
