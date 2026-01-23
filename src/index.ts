@@ -206,19 +206,19 @@ app.get('/', (c) => {
       </body>
     </html>
   `)
-})try {
+})
+
+// API Routes
+
+// Helper to list keys by prefix
+async function listKeys(c: any, prefix: string) {
+  try {
     const list = await c.env.SIEVE_DATA.list({ prefix })
     // Remove prefix for the client
     return c.json(list.keys.map((k: any) => k.name.substring(prefix.length)))
   } catch (e: any) {
     return c.json({ error: e.message }, 500)
   }
-
-// Helper to list keys by prefix
-async function listKeys(c: any, prefix: string) {
-  const list = await c.env.SIEVE_DATA.list({ prefix })
-  // Remove prefix for the client
-  return c.json(list.keys.map((k: any) => k.name.substring(prefix.length)))
 }
 
 app.get('/api/lists', (c) => listKeys(c, 'list:'))
