@@ -8,6 +8,7 @@ type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/', (c) => {
+  c.header('Cache-Control', 'no-store')
   return c.html(`
     <!DOCTYPE html>
     <html>
@@ -35,6 +36,19 @@ app.get('/', (c) => {
         <div id="app">
           <p>Loading...</p>
         </div>
+
+        <script>
+          window.onerror = function(msg, url, line, col, error) {
+             const div = document.getElementById('app');
+             if (div) {
+               div.innerHTML = '<div style="color:red; background:#fff0f0; padding:10px;">' + 
+                 '<h3>Client-Side Error</h3>' +
+                 'Message: ' + msg + '<br>' + 
+                 'Line: ' + line + ':' + col + 
+                 '</div>';
+             }
+          };
+        </script>
 
         <script>
           let currentView = 'lists';
