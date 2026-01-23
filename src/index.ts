@@ -133,40 +133,36 @@ app.get('/', (c) => {
                   
                   <p><strong>1. SCOPE:</strong> Where the rule applies.</p>
                   <ul>
-                    <li>(None) = Global (All emails)</li>
-                    <li><code>!</code> = Scoped (Only specific mailbox, e.g. auto/alert)</li>
+                    <li>(None) = Global (All emails) &rarr; <code>global-*</code></li>
+                    <li><code>!</code> = Scoped (Only specific mailbox) &rarr; <code>scoped-*</code></li>
                   </ul>
 
                   <p><strong>2. TYPE:</strong> Header to check.</p>
                   <ul>
-                    <li>(None) = Subject</li>
-                    <li><code>from:</code> = From header</li>
+                    <li>(None) = Subject &rarr; <code>*-subject-*</code></li>
+                    <li><code>from:</code> = From header &rarr; <code>*-from-*</code></li>
                   </ul>
 
-                  <p><strong>3. ACTION:</strong></p>
+                  <p><strong>3. ACTION:</strong> Maps to template variable suffixes.</p>
                   <table border="1" style="border-collapse:collapse; width:100%; margin-bottom:10px;">
-                    <tr style="background:#eee;"><th>Code</th><th>Effect</th></tr>
-                    <tr><td><code>F</code></td><td>FileInto (Move to folder)</td></tr>
-                    <tr><td><code>R</code></td><td>Mark as Read</td></tr>
-                    <tr><td><code>A</code></td><td>Archive (Copy to Archive)</td></tr>
-                    <tr><td><code>S</code></td><td>Stop processing</td></tr>
-                    <tr><td><code>x1</code></td><td>Expire in 1 day</td></tr>
+                    <tr style="background:#eee;"><th>Code</th><th>Effect</th><th>Variable Suffix</th></tr>
+                    <tr><td><code>F</code>, <code>S</code></td><td>FileInto / Stop</td><td><code>*-default</code></td></tr>
+                    <tr><td><code>FR</code></td><td>Mark as Read</td><td><code>*-read</code></td></tr>
+                    <tr><td><code>FRS</code></td><td>Read + Stop</td><td><code>*-read-stop</code></td></tr>
+                    <tr><td><code>FRA</code></td><td>Read + Archive</td><td><code>*-read-archive</code></td></tr>
+                    <tr><td><code>FRAS</code></td><td>Read + Archive + Stop</td><td><code>*-read-archive-stop</code></td></tr>
+                    <tr><td><code>Fx1</code></td><td>Expire in 1 day</td><td><code>*-expire</code></td></tr>
                   </table>
-                  <p><em>Combinations:</em> <code>FR</code>, <code>FRS</code>, <code>FRA</code>, <code>FRAS</code>, <code>Fx1</code></p>
-
-                  <p><strong>4. PATTERN:</strong> Text to match.</p>
-                  <ul>
-                    <li>If text has <code>*</code> or <code>?</code> -> Uses Wildcard Match</li>
-                    <li>Otherwise -> Uses "Contains"</li>
-                  </ul>
                   
                   <h4>Examples:</h4>
                   <ul>
-                    <li><code>F Your Order Shipped</code> (Move if Subject contains text)</li>
-                    <li><code>FR Daily Digest</code> (Move + Mark Read)</li>
-                    <li><code>from:FRAS bad@actor.com</code> (Global From: Move+Read+Archive+Stop)</li>
-                    <li><code>!F Local Only</code> (Subject: Move only if addressed to this mailbox)</li>
+                    <li><code>F Text</code> &rarr; <code>global-subject-default</code></li>
+                    <li><code>FR Text</code> &rarr; <code>global-subject-read</code></li>
+                    <li><code>!FRA Text</code> &rarr; <code>scoped-subject-read-archive</code></li>
+                    <li><code>from:FRS user@ex.com</code> &rarr; <code>global-from-read-stop</code></li>
                   </ul>
+                  
+                  <p><em>Use these variable names (e.g. <code>{{LIST:global-subject-read}}</code>) in your templates.</em></p>
                 </div>
               </details>
             \` : '';
@@ -369,9 +365,11 @@ app.get('/', (c) => {
                   if (mainListRes.ok) {
                       const text = await mainListRes.text();
                       parsedBuckets = parseRulesList(text);
-                      const keyCount = Object.keys(parsedBuckets).length;
+                      const keys = Object.keys(parsedBuckets);
+                      const keyCount = keys.length;
                       const itemCount = Object.values(parsedBuckets).reduce((a,b) => a + b.length, 0);
                       log(\`Parsed Rule List '\${ruleName}': \${itemCount} items in \${keyCount} categories.\`);
+                      log(\`Categories found: \${keys.join(', ')}\`);
                   } else {
                       log(\`Rule List '\${ruleName}' not found. Will rely on sub-lists/globals only.\`);
                   }
