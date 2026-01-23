@@ -487,7 +487,7 @@ app.get('/', (c) => {
                   
                   let hasActiveList = false;
                   for (const listStr of listMatches) {
-                      // listStr is `["A", "B"]` or `["__IGNORE__"]`
+                      // listStr is '["A", "B"]' or '["__IGNORE__"]'
                       if (!listStr.includes('"__IGNORE__"')) {
                           hasActiveList = true;
                           break;
