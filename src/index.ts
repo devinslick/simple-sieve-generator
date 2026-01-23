@@ -201,7 +201,12 @@ app.get('/', (c) => {
             }
           }
 
-          setView('lists');
+          setView('lists')
+            .catch(e => {
+              const app = document.getElementById('app');
+              app.innerHTML = '<p style="color:red; font-weight:bold;">Critical Error: ' + e.message + '</p>';
+              console.error(e);
+            });
         </script>
       </body>
     </html>
