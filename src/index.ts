@@ -187,7 +187,7 @@ app.get('/', (c) => {
           // --- DSL Parsing Logic ---
           function parseRulesList(rawText) {
              const buckets = {};
-             const lines = rawText.split('\n');
+             const lines = rawText.split('\\n');
              
              for (let line of lines) {
                  line = line.trim();
@@ -215,7 +215,7 @@ app.get('/', (c) => {
                  
                  // 3. Consume Action Code
                  // We split by space to get the first token
-                 const parts = line.split(/\s+/);
+                 const parts = line.split(/\\s+/);
                  const code = parts[0].toUpperCase();
                  let consumedCode = false;
                  
@@ -292,7 +292,7 @@ app.get('/', (c) => {
               log('Template loaded (' + content.length + ' chars).');
 
               // 2. Identify Variables
-              const regex = /\{\{\s*LIST:([-a-zA-Z0-9_\\/]+)(?::([a-zA-Z0-9_]+))?\s*\}\}/g;
+              const regex = /\{\{\\s*LIST:([-a-zA-Z0-9_\\/]+)(?::([a-zA-Z0-9_]+))?\\s*\}\}/g;
               const requiredLists = new Set();
               let match;
               while ((match = regex.exec(content)) !== null) {
