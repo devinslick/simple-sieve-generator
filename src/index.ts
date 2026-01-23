@@ -464,7 +464,7 @@ app.get('/', (c) => {
               // Logic: Look for 'if anyof (...) { ... }' blocks.
               // If ALL [{{LIST...}}] replacements inside the 'anyof' resulted in '__IGNORE__' (or generated empty lists), we remove the block.
               
-              const blockRegex = /(?:#.*?\\n)?\\s*if (?:anyof|allof)\\s*\\(([\\s\\S]*?)\\)\\s*\\{[\\s\\S]*?\\}/g;
+              const blockRegex = new RegExp('(?:#.*?\\\\n)?\\\\s*if (?:anyof|allof)\\\\s*\\\\(([\\\\s\\\\S]*?)\\\\)\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}', 'g');
               content = content.replace(blockRegex, (fullBlock, conditionBody) => {
                   // Check if the condition body contains ONLY "__IGNORE__" lists or empty lists
                   // We do this by checking if there are ANY valid strings created.
@@ -478,7 +478,7 @@ app.get('/', (c) => {
                   // If yes, are ALL of them '["__IGNORE__"]'?
                   
                   // Count total list markers in this block (post-replacement)
-                  const listMatches = conditionBody.match(/\\[(.*?)\\]/g);
+                  const listMatches = conditionBody.match(new RegExp('\\\\[(.*?)\\\\]', 'g'));
                   
                   if (!listMatches) {
                       // No lists involved (e.g. spam check or simple header check), keep block
