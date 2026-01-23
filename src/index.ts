@@ -147,23 +147,25 @@ app.get('/', (c) => {
                   <p><strong>3. ACTION:</strong> Maps to template variable suffixes.</p>
                   <table border="1" style="border-collapse:collapse; width:100%; margin-bottom:10px;">
                     <tr style="background:#eee;"><th>Code</th><th>Effect</th><th>Variable Suffix</th></tr>
-                    <tr><td><code>F</code>, <code>S</code></td><td>FileInto / Stop</td><td><code>*-default</code></td></tr>
-                    <tr><td><code>FR</code></td><td>Mark as Read</td><td><code>*-read</code></td></tr>
-                    <tr><td><code>FRS</code></td><td>Read + Stop</td><td><code>*-read-stop</code></td></tr>
-                    <tr><td><code>FRA</code></td><td>Read + Archive</td><td><code>*-read-archive</code></td></tr>
-                    <tr><td><code>FRAS</code></td><td>Read + Archive + Stop</td><td><code>*-read-archive-stop</code></td></tr>
+                    <tr><td><code>F</code></td><td>FileInto / Default</td><td><code>*-default</code></td></tr>
+                    <tr><td><code>FS</code></td><td>Mark as Seen (was FR)</td><td><code>*-seen</code></td></tr>
+                    <tr><td><code>FSS</code></td><td>Seen + Stop (was FRS)</td><td><code>*-seen-stop</code></td></tr>
+                    <tr><td><code>FSA</code></td><td>Seen + Archive (was FRA)</td><td><code>*-seen-archive</code></td></tr>
+                    <tr><td><code>FSAS</code></td><td>Seen + Archive + Stop</td><td><code>*-seen-archive-stop</code></td></tr>
                     <tr><td><code>Fx1</code></td><td>Expire in 1 day</td><td><code>*-expire</code></td></tr>
+                    <tr><td><code>R</code></td><td>Reject (New)</td><td><code>*-reject</code></td></tr>
                   </table>
                   
                   <h4>Examples:</h4>
                   <ul>
                     <li><code>F Text</code> &rarr; <code>global-subject-default</code></li>
-                    <li><code>FR Text</code> &rarr; <code>global-subject-read</code></li>
-                    <li><code>!FRA Text</code> &rarr; <code>scoped-subject-read-archive</code></li>
-                    <li><code>from:FRS user@ex.com</code> &rarr; <code>global-from-read-stop</code></li>
+                    <li><code>FS Text</code> &rarr; <code>global-subject-seen</code></li>
+                    <li><code>!FSA Text</code> &rarr; <code>scoped-subject-seen-archive</code></li>
+                    <li><code>from:FSS user@ex.com</code> &rarr; <code>global-from-seen-stop</code></li>
+                    <li><code>R bad-spam</code> &rarr; <code>global-subject-reject</code></li>
                   </ul>
                   
-                  <p><em>Use these variable names (e.g. <code>{{LIST:global-subject-read}}</code>) in your templates.</em></p>
+                  <p><em>Use these variable names (e.g. <code>{{LIST:global-subject-seen}}</code>) in your templates.</em></p>
                 </div>
               </details>
             \` : '';
@@ -278,33 +280,66 @@ app.get('/', (c) => {
                  let consumedCode = false;
                  
                  // Mapping Codes to Bucket Suffixes
-                 // Suffixes: default, read, read-stop, read-archive, read-archive-stop, expire
-                 if (['F', 'S', '>'].includes(code)) {
+                 // Suffixes: default, seen (was read), seen-stop, seen-archive, seen-archive-stop, expire, reject
+                 if (['F', 'Stop', '>'].includes(code)) {
                      bucketSuffix = 'default';
                      consumedCode = true;
-                 } else if (code === 'FR') {
+                 } else if (code === 'FS') {
+                     // Was FR (File Seen/Read)
                      // Context-dependent mapping based on template usage
                      // Subject: template distinguishes read vs read-stop?
                      // From: template usually only has read-stop. 
-                     // Let's map strict:
-                     bucketSuffix = 'read';
-                     // Correction for 'from' where 'read' variable might not exist? 
-                     // Template checks will handle empty list if we map it wrong? 
-                     // No, we must map it to where the template looks.
-                     if (type === 'from') bucketSuffix = 'read-stop'; 
-                 } else if (code === 'FRS') {
-                     bucketSuffix = 'read-stop';
+                     bucketSuffix = 'seen';
+                     if (type === 'from') bucketSuffix = 'seen-stop'; 
+                 } else if (code === 'FSS') {
+                     // Was FRS (File Seen Stop)
+                     bucketSuffix = 'seen-stop';
                      consumedCode = true;
-                 } else if (code === 'FRA') {
-                     bucketSuffix = 'read-archive';
+                 } else if (code === 'FSA') {
+                     // Was FRA (File Seen Archive)
+                     bucketSuffix = 'seen-archive';
                      consumedCode = true;
-                 } else if (code === 'FRAS') {
-                     bucketSuffix = 'read-archive-stop';
+                 } else if (code === 'FSAS') {
+                     // Was FRAS (File Seen Archive Stop)
+                     bucketSuffix = 'seen-archive-stop';
                      consumedCode = true;
                  } else if (code === 'FX1') {
                      bucketSuffix = 'expire';
                      consumedCode = true;
+                 } else if (code === 'R') {
+                     // New: Reject
+                     bucketSuffix = 'reject';
+                     consumedCode = true;
                  }
+
+                 // Special case: S is ambiguous if it stands for Stop standalone or Seen standalone?
+                 // But in the previous logic: if (['F', 'S', '>'].includes(code))
+                 // This S meant 'Standard FileInto' or 'Stop' (Default).
+                 // We should keep S as Default mapping for backward compat if that was the intent, 
+                 // OR changes it to 'seen'? 
+                 // User said "Change R (Read) to S (Seen)".
+                 // If S was "Stop", we have a collision.
+                 // Legend said: S = Stop. F or S = Default.
+                 // If we now use S for Seen, we can't use S for Stop as a standalone code easily?
+                 // But usually codes are combined like FS, FSS.
+                 // If the user inputs just "S Subject", does it mean "Seen Subject" or "Stop Subject"?
+                 // Previous legend: S = Stop/Default.
+                 // New legend: S = Seen.
+                 // So "S Subject" -> Mark as Seen (and maybe file into default).
+                 // However, the specific code block handles `FS`, `FSS` etc.
+                 // We need to resolve the single letter `S`.
+                 // Let's remove S from the Default set if it now means Seen.
+                 // But if we want `S` to map to `seen`, we need to add:
+                  else if (code === 'S') { 
+                      bucketSuffix = 'seen'; 
+                      consumedCode = true; 
+                  }
+                 
+                 // However, "Stop" is usually implicit in FileInto default.
+                 // Let's assume the user uses FS, FSS, etc. mainly.
+                 // I will remove 'S' from the first check to avoid "Stop" confusion, 
+                 // assuming standard is F (File).
+
                  
                  // If we consumed a code, remove it from line
                  // If NOT consumed (e.g. pattern started with "Financial"), bucketSuffix stays 'default'
