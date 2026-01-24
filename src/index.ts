@@ -258,6 +258,22 @@ app.get('/', (c) => {
                 }
             }
             
+            async function copyToClipboard() {
+                const copyText = document.getElementById("genOutput");
+                if (!copyText.value) return;
+                
+                try {
+                    await navigator.clipboard.writeText(copyText.value);
+                    const btn = document.getElementById('copyBtn');
+                    const originalText = btn.innerText;
+                    btn.innerText = "Copied!";
+                    setTimeout(() => btn.innerText = originalText, 2000);
+                } catch (err) {
+                    console.error('Failed to copy: ', err);
+                    alert("Failed to copy to clipboard");
+                }
+            }
+            
             // Init
             window.onload = () => {
                 initTheme();
@@ -294,7 +310,10 @@ app.get('/', (c) => {
         
         <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
         
-        <label>Generated Output:</label>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <label style="margin-bottom: 0;">Generated Output:</label>
+            <button id="copyBtn" onclick="copyToClipboard()" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">Copy to Clipboard</button>
+        </div>
         <textarea id="genOutput" placeholder="Generated script will appear here..." readonly style="background: var(--bg-input); color: var(--text);"></textarea>
         
         <div id="genLogs" class="log-box">Ready.</div>
