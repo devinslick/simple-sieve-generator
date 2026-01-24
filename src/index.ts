@@ -12,16 +12,96 @@ app.get('/', (c) => {
     <html>
       <head>
         <title>Simple Sieve Generator</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
-          body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-          textarea { width: 100%; height: 200px; }
-          button { padding: 0.5rem 1rem; cursor: pointer; margin-right: 0.5rem; }
-          .error { color: red; }
-          .success { color: green; }
-          select { padding: 0.5rem; width: 100%; margin-bottom: 1rem; }
-          .nav { margin-bottom: 2rem; border-bottom: 1px solid #ccc; padding-bottom: 1rem; }
-          .nav a { margin-right: 1.5rem; text-decoration: none; color: #333; font-weight: bold; cursor: pointer; }
-          .nav a:hover { color: #007bff; }
+          :root {
+            --primary: #007bff;
+            --danger: #dc3545;
+            --bg-light: #f8f9fa;
+            --border: #ccc;
+            --text: #333;
+          }
+          * { box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 1rem;
+            color: var(--text);
+            line-height: 1.6;
+          }
+          h1 { margin: 0 0 1.5rem 0; font-size: 1.75rem; }
+          
+          /* Forms */
+          label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem; }
+          input[type="text"], select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            font-family: inherit;
+          }
+          textarea {
+            min-height: 200px;
+            font-family: monospace;
+            resize: vertical;
+          }
+          
+          /* Buttons */
+          button { 
+            padding: 0.75rem 1.25rem; 
+            cursor: pointer; 
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: opacity 0.2s;
+            background-color: #e9ecef;
+            color: #333;
+          }
+          button:hover { opacity: 0.9; }
+          .btn-primary { background-color: var(--primary); color: white; }
+          .btn-danger { background-color: var(--danger); color: white; }
+          
+          /* Layout Components */
+          .card {
+            background: var(--bg-light);
+            padding: 1.25rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border: 1px solid #eee;
+          }
+          
+          .controls-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+          }
+          .controls-row select { flex: 1; min-width: 250px; margin-bottom: 0; }
+          .controls-row button { flex-shrink: 0; }
+          
+          .log-box {
+            font-family: monospace; 
+            font-size: 0.85em; 
+            color: #444; 
+            background: #f1f1f1; 
+            padding: 1rem; 
+            border-radius: 6px; 
+            border: 1px solid var(--border);
+            max-height: 300px; 
+            overflow-y: auto;
+            white-space: pre-wrap;
+          }
+
+          /* Responsive */
+          @media (max-width: 600px) {
+            .controls-row { flex-direction: column; }
+            .controls-row select, .controls-row button { width: 100%; }
+            h1 { font-size: 1.5rem; }
+            body { padding: 0.75rem; }
+          }
         </style>
         <script>
             // --- UI LOGIC ---
@@ -116,32 +196,31 @@ app.get('/', (c) => {
       <body>
         <h1>Simple Sieve Generator</h1>
         
-        <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
-             <label><strong>Load/Manage Saved List:</strong></label><br>
-             <div style="display:flex; gap: 10px;">
+        <div class="card">
+             <label for="savedLists">Load/Manage Saved List:</label>
+             <div class="controls-row">
                  <select id="savedLists" onchange="loadSelectedList()"></select>
                  <button onclick="saveCurrentList()">Save Current</button>
-                 <button onclick="deleteCurrentList()" style="background-color: #dc3545; color: white;">Delete Selected</button>
+                 <button onclick="deleteCurrentList()" class="btn-danger">Delete Selected</button>
              </div>
         </div>
 
         <div>
-          <label><strong>Folder Name / List Name (e.g. "Shopping"):</strong></label><br>
-          <input type="text" id="folderName" value="Shopping" style="width: 100%; box-sizing: border-box; padding: 0.5rem;">
+          <label for="folderName">Folder Name / List Name (e.g. "Shopping"):</label>
+          <input type="text" id="folderName" value="Shopping">
         </div>
-        <br>
         
         <div>
-          <label><strong>Rules List:</strong> <a href="/legend" target="_blank" style="font-size: 0.9em;">(View Legend)</a></label><br>
-          <textarea id="rulesInput" placeholder="!alias1,alias2!FRASD deal\n!scope\nSubject Rule F\nfrom:sender@example.com FR"></textarea>
+          <label for="rulesInput">Rules List: <a href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a></label>
+          <textarea id="rulesInput" placeholder="!alias1,alias2!FRASD deal&#10;!scope&#10;Subject Rule F&#10;from:sender@example.com FR"></textarea>
         </div>
-        <br>
         
-        <button onclick="generateScript()" style="background-color: #007bff; color: white;">Generate Sieve Script</button>
-        <br><br>
+        <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
         
-        <textarea id="genOutput" placeholder="Generated script will appear here..." readonly></textarea>
-        <div id="genLogs" style="font-family:monospace; font-size: 0.8em; color: #555; background: #f0f0f0; padding: 5px; border: 1px solid #ccc; max-height: 200px; overflow-y: auto;">Ready.</div>
+        <label>Generated Output:</label>
+        <textarea id="genOutput" placeholder="Generated script will appear here..." readonly style="background: #fafafa;"></textarea>
+        
+        <div id="genLogs" class="log-box">Ready.</div>
       </body>
     </html>
   `);
