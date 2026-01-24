@@ -154,7 +154,7 @@ app.get('/', (c) => {
                     <tr><td><code>FRS</code></td><td>Read + Stop</td><td><code>*-read-stop</code></td></tr>
                     <tr><td><code>FRA</code></td><td>Read + Archive</td><td><code>*-read-archive</code></td></tr>
                     <tr><td><code>FRAS</code></td><td>Read + Archive + Stop</td><td><code>*-read-archive-stop</code></td></tr>
-                    <tr><td><code>FRASD</code></td><td>Deals (FRAS)</td><td><code>aliases-deal</code></td></tr>
+                    <tr><td><code>FRASD [label]</code></td><td>Designated (FRAS)</td><td><code>aliases-[label]</code></td></tr>
                     <tr><td><code>Fx1</code></td><td>Expire in 1 day</td><td><code>*-expire</code></td></tr>
                     <tr><td><code>B</code></td><td>Bounce (Reject)</td><td><code>*-reject</code></td></tr>
                   </table>
@@ -258,10 +258,12 @@ app.get('/', (c) => {
 
                  // 0. Check for Alias List Syntax: !alias1,alias2!CODE Pattern
                  // Example: !auto,credit!FRAS *
-                 const aliasMatch = line.match(/^!([^!]+)!([a-zA-Z0-9]+)(?:\s+.*)?$/);
+                 const aliasMatch = line.match(/^!([^!]+)!([a-zA-Z0-9]+)(?:\s+(.+))?$/);
                  if (aliasMatch) {
                      const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
                      const code = aliasMatch[2].toUpperCase();
+                     const args = aliasMatch[3] ? aliasMatch[3].trim() : '';
+
                      let suffix = 'default';
                      
                      if (['F', 'STOP', 'S', '>'].includes(code)) suffix = 'default';
@@ -271,7 +273,13 @@ app.get('/', (c) => {
                      else if (code === 'FRAS') suffix = 'read-archive-stop';
                      else if (code === 'FX1') suffix = 'expire';
                      else if (code === 'B') suffix = 'reject';
-                     else if (code === 'FRASD') suffix = 'deal';
+                     else if (code === 'FRASD') {
+                         if (!args) {
+                             console.warn('FRASD requires an argument (e.g. !FRASD deal). Skipping.');
+                             continue;
+                         }
+                         suffix = args.toLowerCase();
+                     }
                      
                      const key = 'aliases-' + suffix;
                      if (!buckets[key]) buckets[key] = [];
@@ -460,6 +468,85 @@ app.get('/', (c) => {
                  return items.map(i => \`"\${i.replace(/"/g, '\\\\\\\\"')}"\`).join(', ');
               });
               log('Tags replaced. Done.');
+
+              // 5.5. Inject Dynamic FRASD Blocks
+              // Detect any aliases-xyz buckets that were populated but NOT used in the template (because we haven't replaced them yet)
+              // This allows !FRASD shopping to work automatically without editing the template.
+              
+              const dynamicBlocks = [];
+              const bucketKeys = Object.keys(parsedBuckets);
+              
+              for (const key of bucketKeys) {
+                  if (key.startsWith('aliases-')) {
+                    const suffix = key.substring(8); // 'shopping' from 'aliases-shopping'
+                    const standardSuffixes = ['default', 'read', 'read-stop', 'read-archive', 'read-archive-stop', 'expire', 'reject'];
+                    
+                    // If it's a dynamic suffix (not one of the standard ones we hardcoded in the template)
+                    if (!standardSuffixes.includes(suffix)) {
+                         log(\`Generating dynamic block for destination '\${suffix}'...\`);
+                         
+                         // Get the list items directly
+                         const items = parsedBuckets[key];
+                         if (!items || items.length === 0) continue;
+                         
+                         // Create the lists
+                         // We assume "contains" and "matches" separation logic here just like standard vars
+                         const containsList = items.filter(i => !i.includes('*') && !i.includes('?')).map(i => \`"\${i.replace(/"/g, '\\\\\\\\"')}"\`).join(', ');
+                         const matchesList = items.filter(i => i.includes('*') || i.includes('?')).map(i => \`"\${i.replace(/"/g, '\\\\\\\\"')}"\`).join(', ');
+
+                         // Build the Sieve Block
+                         // Note: We use Title Case for the folder name (e.g. "shopping" -> "Shopping")
+                         const folderName = suffix.charAt(0).toUpperCase() + suffix.slice(1);
+                         
+                         let conditions = [];
+                         if (containsList.length > 0) conditions.push(\`header :comparator "i;unicode-casemap" :contains "X-Original-To" [\${containsList}]\`);
+                         if (matchesList.length > 0) conditions.push(\`header :comparator "i;unicode-casemap" :matches "X-Original-To" [\${matchesList}]\`);
+                         
+                         if (conditions.length > 0) {
+                             const block = \`
+# Dynamic Alias | Designated (\${folderName})
+if allof (
+  anyof (
+    \${conditions.join(',\\n    ')}
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "\${folderName}";
+  addflag "\\\\Seen";
+  fileinto "archive";
+  stop;
+}
+\`;
+                             dynamicBlocks.push(block);
+                         }
+                    }
+                  }
+              }
+
+              // Prepend dynamic blocks to the content (or append? Prepend usually better for aliases)
+              // Actually, standard alias rules are normally at the top. Let's insert them after the header.
+              
+              if (dynamicBlocks.length > 0) {
+                  // Find insertion point - after "require" or header comments
+                  // Simple hack: Look for the first "if" statement and insert before it, 
+                  // or just append to the generated alias section if we can find it.
+                  
+                  // Let's try to insert after the standard alias headers if possible, 
+                  // otherwise just at the start of the rules.
+                  
+                  const aliasMarker = '# --- ALIAS RULES ---';
+                  if (content.includes(aliasMarker)) {
+                      content = content.replace(aliasMarker, aliasMarker + '\\n' + dynamicBlocks.join('\\n'));
+                  } else {
+                      // Just append to top after require
+                      const requireEnd = content.indexOf(';');
+                      if (requireEnd > -1) {
+                          content = content.slice(0, requireEnd + 1) + '\\n\\n' + dynamicBlocks.join('\\n') + '\\n' + content.slice(requireEnd + 1);
+                      } else {
+                          content = dynamicBlocks.join('\\n') + '\\n' + content;
+                      }
+                  }
+              }
 
               // 6. Prune Empty Rules
               // Remove blocks where "__IGNORE__" is the only thing in the list strings, OR inside known static headers.

@@ -25,6 +25,7 @@ A combination of characters that determine what happens when the pattern matches
 | `R` | **Read** | Marks the email as seen (`\Seen`). |
 | `A` | **Archive** | Moves email to the `Archive` folder (and the Rule folder). |
 | `S` | **Stop** | Stops processing further Sieve scripts. |
+| `D` | **Designated** | Moves email to a specific destination defined in the template. |
 | `B` | **Bounce** | Rejects the message with an error. |
 | `x1` | **Expire** | Sets the email to expire in 1 day. |
 
@@ -58,7 +59,31 @@ Defines a list of aliased addresses that should target this rule folder using `X
 *   **Syntax**: `!alias1,alias2,...!CODE [PATTERN]`
 *   **Example**: `!auto,credit,receipts!FRAS *`
     *   **Meaning**: If email is sent to `auto` OR `credit` OR `receipts`, apply action `FRAS`.
-    *   **Note**: The **PATTERN** is currently ignored for Alias rules. These rules are designed for **Mailbox Routing**, meaning they route *all* mail sent to the specified aliases, effectively treating the pattern as `*` (Match All).
+    *   **Note**: The **PATTERN** is currently ignored for Alias rules. These rules are designed for **Mailbox Routing**, meaning they route *all* mail sent to the specified aliases.
+
+### 6. CUSTOMIZING DESIGNATED ACTIONS (FRASD)
+The `FRASD` code requires a label argument (e.g., `deal`).
+- **Syntax**: `!alias1,alias2!FRASD label`
+- **Mapping**: This maps to the template variable `aliases-label`.
+- **Usage**: You must ensure your template handles the specific label you choose.
+
+**Example**:
+1. You write a rule: `!shop1,shop2!FRASD shopping`
+   - This groups these aliases into a variable named `aliases-shopping`.
+2. You must ensure your **Template** includes a block to handle this variable and define the folder:
+   ```sieve
+   # Handle 'shopping' aliases
+   if anyof (
+     header :contains "X-Original-To" [{{LIST:aliases-shopping:contains}}],
+     header :matches "X-Original-To" [{{LIST:aliases-shopping:matches}}]
+   ) {
+       fileinto "Shopping"; /* You define the folder name here */
+       addflag "\\Seen";
+       fileinto "archive";
+       stop;
+   }
+   ```
+   *If the template doesn't reference `aliases-shopping`, the rule will be ignored.*
 
 ## Examples
 
