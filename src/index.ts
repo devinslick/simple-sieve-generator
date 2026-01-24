@@ -604,28 +604,6 @@ if allof (
 
               // 6.5 Fix Broken Blocks (Nested Pruning Artifacts)
               // Sometimes pruning leaves weird artifacts if braces were mismatched or nested incorrectly.
-              // The user provided: `!auto,credit,entertainment,food,receipt,service,services,shop,travel,streaming,shopping!FRASD deal`
-              // Wait. `FRASD` is 5 chars. `[a-zA-Z0-9]+`.
-              // Maybe the issue is `split('\\n')` handling carriage returns? `\r`?
-              // I added `line = line.trim()` so that should be fine.
-              
-              // Let's look closely at `parseRulesList` again.
-              // If `parseRulesList` matched it, `continue` would be hit, and it wouldn't reach the "Scoped | Subject" part.
-              // It clearly DID reach the "Scoped | Subject" part.
-              // So `aliasMatch` was null.
-              
-              // Does the regex `^!([^!]+)!` match commas? `[^!]+` means "anything not an exclamation mark". Yes.
-              
-              // Maybe strict whitespace?
-              // Let's make the regex more permissive.
-              // `const aliasMatch = line.match(/^!([^!]+)!(\w+)(?:\s+(.*))?$/);`
-              // `\w` is `[a-zA-Z0-9_]`.
-              // `.*` instead of `.+`.
-
-              // Also, let's fix the Pruning Regex Lazy Match issue.
-              // We'll require the closing brace to be on its own line (possibly indented).
-              // `\\n\\s*\\}`
-
 
               // 7. Cleanup extra newlines
               content = content.replace(/\\n\s*\\n\s*\\n/g, '\\n\\n');
