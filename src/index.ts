@@ -259,8 +259,8 @@ app.get('/', (c) => {
                  // 0. Check for Alias List Syntax: !alias1,alias2!CODE Pattern
                  // Example: !auto,credit!FRAS *
                  // Allow whitespace around the separator ! and match commas/text inside the alias group flexibly.
-                 // The alias group `([^!]+)` swallows the first `!` if we are not careful, but `^!` handles start.
-                 // The second `!` separates alias list from code.
+                 // The alias group ([^!]+) swallows the first ! if we are not careful, but ^! handles start.
+                 // The second ! separates alias list from code.
                  const aliasMatch = line.match(/^!\s*([^!]+?)\s*!\s*([a-zA-Z0-9]+)(?:\s+(.+))?$/);
                  if (aliasMatch) {
                      const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
