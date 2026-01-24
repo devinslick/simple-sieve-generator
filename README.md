@@ -70,3 +70,6 @@ Once these are set, pushing to the `main` branch will automatically inject these
 3. **Write Rules**: Use the shorthand syntax (see `LEGEND.md`).
 4. **Generate**: Click "Generate Sieve Script" to produce the standard Sieve code.
 5. **Sync**: Files under `examples/lists` are auto-uploaded on deploy.
+
+### Screenshots
+![Screenshot of UI](screenshots/deal.png)
