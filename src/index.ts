@@ -179,59 +179,14 @@ app.post('/generate', async (c) => {
 // --- Logic ---
 
 function parseRulesList(rawText) {
-    const buckets = {};
     const lines = rawText.split('\n');
-    
-    for (let line of lines) {
-        line = line.trim();
-        if (!line || line.startsWith('#')) continue;
-
-        // 0. Check for Alias List Syntax: !alias1,alias2!CODE Pattern
-        const aliasMatch = line.match(/^!([^!]+)!(\w+)(?:\s+(.+))?$/);
-        
-        if (aliasMatch) {
-            const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
-            const code = aliasMatch[2].toUpperCase();
-            const args = aliasMatch[3] ? aliasMatch[3].trim() : '';
-
-            let suffix = 'default';
-            // Determine suffix based on code
-            if (['F', 'STOP', 'S', '>'].includes(code)) suffix = 'default';
-            else if (code === 'FR') suffix = 'read';
-            else if (code === 'FRS') suffix = 'read-stop';
-            else if (code === 'FRA') suffix = 'read-archive';
-            else if (code === 'FRAS') suffix = 'read-archive-stop';
-            else if (code === 'FX1') suffix = 'expire';
-            else if (code === 'B') suffix = 'reject';
-            else if (code === 'FRASD') {
-                if (!args) continue; 
-                suffix = args.toLowerCase();
-            }
-            
-            // Store alias matches
-            const key = 'aliases:' + suffix;
-            if (!buckets[key]) buckets[key] = [];
-            buckets[key].push(...aliases);
-            continue;
-        }
-        
-        // State tracking variables (though line-by-line defaults are static per line in this logic unless context was passed?
-        // Wait, the original logic tracked scope *across* lines. 
-        // "!" switch scope to scoped. "global" switched to global.
-        // My previous logic in this rewrite didn't track state nicely. 
-        // I must reimplement statefulness if the user relies on headers like "!" on a separate line.
-    }
-    
-    // RE-IMPLEMENT STATEFUL PARSING CORRECTLY
-    // The loop above skipped stateful scope tracking. Let's fix.
     
     const context = {
         scope: 'global', // 'global' or 'scoped'
     };
     
-    // Clear buckets and restart loop with state
-    const finalBuckets = {};
-    
+    const buckets = {};
+
     for (let line of lines) {
         line = line.trim();
         if (!line || line.startsWith('#')) continue;
@@ -255,8 +210,8 @@ function parseRulesList(rawText) {
                  suffix = args.toLowerCase();
              }
              const key = 'aliases:' + suffix;
-             if (!finalBuckets[key]) finalBuckets[key] = [];
-             finalBuckets[key].push(...aliases);
+             if (!buckets[key]) buckets[key] = [];
+             buckets[key].push(...aliases);
              continue; 
         }
 
@@ -320,13 +275,13 @@ function parseRulesList(rawText) {
              matchString = currentLine.substring(possibleCode.length).trim();
         }
         
-        const key = `\${currentScope}-\${type}-\${bucketSuffix}`;
-        if (!finalBuckets[key]) finalBuckets[key] = [];
+        const key = `${currentScope}-${type}-${bucketSuffix}`;
+        if (!buckets[key]) buckets[key] = [];
         const items = matchString.split(',').map(s => s.trim()).filter(s => s !== '');
-        finalBuckets[key].push(...items);
+        buckets[key].push(...items);
     }
     
-    return finalBuckets;
+    return buckets;
 }
 
 function mapCodeToSuffix(code, type) {
