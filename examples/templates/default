@@ -98,6 +98,20 @@ if allof (
   stop;
 }
 
+# 8. Aliases | Deal (FRASD)
+if allof (
+  anyof (
+    header :comparator "i;unicode-casemap" :contains "X-Original-To" [{{LIST:aliases-deal:contains}}],
+    header :comparator "i;unicode-casemap" :matches "X-Original-To" [{{LIST:aliases-deal:matches}}]
+  ),
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "Deal";
+  addflag "\\Seen";
+  fileinto "archive";
+  stop;
+}
+
 # --- GLOBAL RULES ---
 
 # 1. Global | Subject | Default (F) - FileInto

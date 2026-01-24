@@ -154,6 +154,7 @@ app.get('/', (c) => {
                     <tr><td><code>FRS</code></td><td>Read + Stop</td><td><code>*-read-stop</code></td></tr>
                     <tr><td><code>FRA</code></td><td>Read + Archive</td><td><code>*-read-archive</code></td></tr>
                     <tr><td><code>FRAS</code></td><td>Read + Archive + Stop</td><td><code>*-read-archive-stop</code></td></tr>
+                    <tr><td><code>FRASD</code></td><td>Deals (FRAS)</td><td><code>aliases-deal</code></td></tr>
                     <tr><td><code>Fx1</code></td><td>Expire in 1 day</td><td><code>*-expire</code></td></tr>
                     <tr><td><code>B</code></td><td>Bounce (Reject)</td><td><code>*-reject</code></td></tr>
                   </table>
@@ -270,6 +271,7 @@ app.get('/', (c) => {
                      else if (code === 'FRAS') suffix = 'read-archive-stop';
                      else if (code === 'FX1') suffix = 'expire';
                      else if (code === 'B') suffix = 'reject';
+                     else if (code === 'FRASD') suffix = 'deal';
                      
                      const key = 'aliases-' + suffix;
                      if (!buckets[key]) buckets[key] = [];
