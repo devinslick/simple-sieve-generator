@@ -1,7 +1,10 @@
 
 import { Hono } from 'hono';
+type Bindings = {
+  SIEVE_DATA: KVNamespace
+}
 
-const app = new Hono();
+const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/', (c) => {
   return c.html(`
@@ -12,11 +15,48 @@ app.get('/', (c) => {
         <style>
           body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
           textarea { width: 100%; height: 200px; }
-          button { padding: 0.5rem 1rem; cursor: pointer; }
+          button { padding: 0.5rem 1rem; cursor: pointer; margin-right: 0.5rem; }
           .error { color: red; }
           .success { color: green; }
+          select { padding: 0.5rem; width: 100%; margin-bottom: 1rem; }
+          .nav { margin-bottom: 2rem; border-bottom: 1px solid #ccc; padding-bottom: 1rem; }
+          .nav a { margin-right: 1.5rem; text-decoration: none; color: #333; font-weight: bold; cursor: pointer; }
+          .nav a:hover { color: #007bff; }
         </style>
         <script>
+            // --- UI LOGIC ---
+            async function loadListNames() {
+                try {
+                    const res = await fetch('/api/lists');
+                    if(res.ok) {
+                        const lists = await res.json();
+                        const selector = document.getElementById('savedLists');
+                        selector.innerHTML = '<option value="">-- Load Saved List --</option>' + 
+                            lists.map(l => \`<option value="\${l}">\${l}</option>\`).join('');
+                    }
+                } catch(e) { console.error('Failed to load lists', e); }
+            }
+
+            async function saveCurrentList() {
+                const name = prompt("Enter a name for this list:");
+                if(!name) return;
+                const content = document.getElementById('rulesInput').value;
+                try {
+                    await fetch(\`/api/lists/\${name}\`, { method: 'PUT', body: content });
+                    alert('Saved!');
+                    loadListNames();
+                } catch(e) { alert('Error saving: ' + e.message); }
+            }
+
+            async function loadSelectedList() {
+                const name = document.getElementById('savedLists').value;
+                if(!name) return;
+                const res = await fetch(\`/api/lists/\${name}\`);
+                if(res.ok) {
+                    document.getElementById('rulesInput').value = await res.text();
+                }
+            }
+
             async function generateScript() {
                 const folderName = document.getElementById('folderName').value;
                 const rulesInput = document.getElementById('rulesInput').value;
@@ -38,14 +78,25 @@ app.get('/', (c) => {
                     console.error(e);
                 }
             }
+            
+            // Init
+            window.onload = loadListNames;
         </script>
       </head>
       <body>
         <h1>Simple Sieve Generator</h1>
         
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
+             <label><strong>Load Saved List:</strong></label><br>
+             <div style="display:flex; gap: 10px;">
+                 <select id="savedLists" onchange="loadSelectedList()"></select>
+                 <button onclick="saveCurrentList()">Save Current</button>
+             </div>
+        </div>
+
         <div>
           <label><strong>Folder Name (e.g. "Shopping"):</strong></label><br>
-          <input type="text" id="folderName" value="Shopping" style="width: 100%; box-sizing: border-box;">
+          <input type="text" id="folderName" value="Shopping" style="width: 100%; box-sizing: border-box; padding: 0.5rem;">
         </div>
         <br>
         
@@ -55,7 +106,7 @@ app.get('/', (c) => {
         </div>
         <br>
         
-        <button onclick="generateScript()">Generate Sieve Script</button>
+        <button onclick="generateScript()" style="background-color: #007bff; color: white;">Generate Sieve Script</button>
         <br><br>
         
         <textarea id="genOutput" placeholder="Generated script will appear here..." readonly></textarea>
@@ -64,6 +115,30 @@ app.get('/', (c) => {
     </html>
   `);
 });
+
+// --- API ROUTES FOR SAVE/LOAD ---
+
+app.get('/api/lists', async (c) => {
+    try {
+        const list = await c.env.SIEVE_DATA.list({ prefix: 'list:' });
+        return c.json(list.keys.map(k => k.name.substring(5))); // remove 'list:' prefix
+    } catch(e) { return c.json([]); }
+});
+
+app.get('/api/lists/:name', async (c) => {
+    const name = c.req.param('name');
+    const val = await c.env.SIEVE_DATA.get('list:' + name);
+    if(val === null) return c.notFound();
+    return c.text(val);
+});
+
+app.put('/api/lists/:name', async (c) => {
+    const name = c.req.param('name');
+    const content = await c.req.text();
+    await c.env.SIEVE_DATA.put('list:' + name, content);
+    return c.json({ success: true });
+});
+
 
 app.get('/legend', async (c) => {
   return c.html(`
@@ -270,7 +345,7 @@ function generateSieveScript(folderName, buckets) {
     const ruleName = folderName.trim() || "Default";
     const ruleNameLower = ruleName.toLowerCase();
     
-    let script = `# Generated Sieve Script for \${ruleName}\n`;
+    let script = `# Generated Sieve Script for ${ruleName}\n`;
     script += `require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];\n\n`;
     
     script += `# Generated: Do not run this script on spam messages\n`;
@@ -281,8 +356,8 @@ function generateSieveScript(folderName, buckets) {
         const matches = [];
         for (let item of items) {
             item = item.replace(/^"|"$/g, '');
-            if (item.includes('*') || item.includes('?')) matches.push(`"\${item}"`);
-            else contains.push(`"\${item}"`);
+            if (item.includes('*') || item.includes('?')) matches.push(`"${item}"`);
+            else contains.push(`"${item}"`);
         }
         return { contains, matches };
     };
@@ -299,28 +374,28 @@ function generateSieveScript(folderName, buckets) {
             
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Original-To" [\${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Original-To" [\${matches.join(', ')}]`);
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Original-To" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Original-To" [${matches.join(', ')}]`);
             
             if (conditions.length === 0) continue;
             
-            const matchBlock = conditions.length > 1 ? `anyof (\n    \${conditions.join(',\n    ')}\n  )` : conditions[0];
+            const matchBlock = conditions.length > 1 ? `anyof (\n    ${conditions.join(',\n    ')}\n  )` : conditions[0];
             
             let body = '';
-            if (suffix === 'default') body = `fileinto "\${ruleName}";`;
-            else if (suffix === 'read') body = `fileinto "\${ruleName}";\n  addflag "\\\\Seen";`;
-            else if (suffix === 'read-stop') body = `fileinto "\${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
-            else if (suffix === 'read-archive') body = `fileinto "\${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
-            else if (suffix === 'read-archive-stop') body = `fileinto "\${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
-            else if (suffix === 'expire') body = `fileinto "\${ruleName}";\n  expire "day" "1";\n  stop;`;
+            if (suffix === 'default') body = `fileinto "${ruleName}";`;
+            else if (suffix === 'read') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";`;
+            else if (suffix === 'read-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
+            else if (suffix === 'read-archive') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
+            else if (suffix === 'read-archive-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
+            else if (suffix === 'expire') body = `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
             else if (suffix === 'reject') body = `reject "This message was rejected by the mail delivery system.";\n  stop;`;
             else {
                 const label = suffix.charAt(0).toUpperCase() + suffix.slice(1);
-                body = `fileinto "\${label}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
+                body = `fileinto "${label}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
             }
             
-            script += `# Aliases | \${suffix}\n`;
-            script += `if allof (\n  \${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  \${body}\n}\n\n`;
+            script += `# Aliases | ${suffix}\n`;
+            script += `if allof (\n  ${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  ${body}\n}\n\n`;
         }
     }
     
@@ -336,12 +411,12 @@ function generateSieveScript(folderName, buckets) {
             if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [\${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [\${matches.join(', ')}]`);
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
             if (conditions.length === 0) continue;
             let body = getActionBody(suffix, ruleName);
-            script += `# Global | Subject | \${suffix}\n`;
-            script += `if anyof (\n  \${conditions.join(',\n  ')}\n) {\n  \${body}\n}\n\n`;
+            script += `# Global | Subject | ${suffix}\n`;
+            script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
         }
         for (const key of globalFromKeys) {
             const suffix = key.substring('global-from-'.length);
@@ -349,12 +424,12 @@ function generateSieveScript(folderName, buckets) {
             if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From"] [\${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From"] [\${matches.join(', ')}]`);
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From"] [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From"] [${matches.join(', ')}]`);
             if (conditions.length === 0) continue;
             let body = getActionBody(suffix, ruleName);
-            script += `# Global | From | \${suffix}\n`;
-            script += `if anyof (\n  \${conditions.join(',\n  ')}\n) {\n  \${body}\n}\n\n`;
+            script += `# Global | From | ${suffix}\n`;
+            script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
         }
     }
     
@@ -364,8 +439,8 @@ function generateSieveScript(folderName, buckets) {
     
     if (scopedSubjectKeys.length || scopedFromKeys.length) {
         script += `# --- SCOPED RULES ---\n`;
-        script += `# Applies only when delivered to: \${ruleNameLower}...\n`;
-        script += `if header :contains "X-Original-To" "\${ruleNameLower}" {\n\n`;
+        script += `# Applies only when delivered to: ${ruleNameLower}...\n`;
+        script += `if header :contains "X-Original-To" "${ruleNameLower}" {\n\n`;
         
         for (const key of scopedSubjectKeys) {
             const suffix = key.substring('scoped-subject-'.length);
@@ -373,13 +448,13 @@ function generateSieveScript(folderName, buckets) {
             if (!items.length) continue;
              const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [\${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [\${matches.join(', ')}]`);
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
             let body = getActionBody(suffix, ruleName);
             body = body.split('\n').map(l => '  ' + l).join('\n');
             const conditionStr = conditions.join(',\n      ');
-            script += `    # Scoped | Subject | \${suffix}\n`;
-            script += `    if anyof (\n      \${conditionStr}\n    ) {\n      \${body}\n    }\n\n`;
+            script += `    # Scoped | Subject | ${suffix}\n`;
+            script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
         }
         
         for (const key of scopedFromKeys) {
@@ -388,13 +463,13 @@ function generateSieveScript(folderName, buckets) {
              if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From"] [\${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From"] [\${matches.join(', ')}]`);
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From"] [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From"] [${matches.join(', ')}]`);
             let body = getActionBody(suffix, ruleName);
             body = body.split('\n').map(l => '  ' + l).join('\n');
             const conditionStr = conditions.join(',\n      ');
-            script += `    # Scoped | From | \${suffix}\n`;
-            script += `    if anyof (\n      \${conditionStr}\n    ) {\n      \${body}\n    }\n\n`;
+            script += `    # Scoped | From | ${suffix}\n`;
+            script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
         }
         script += `}\n`;
     }
@@ -403,14 +478,14 @@ function generateSieveScript(folderName, buckets) {
 }
 
 function getActionBody(suffix, ruleName) {
-    if (suffix === 'default') return `fileinto "\${ruleName}";`;
-    if (suffix === 'read') return `fileinto "\${ruleName}";\n  addflag "\\\\Seen";`;
-    if (suffix === 'read-stop') return `fileinto "\${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
-    if (suffix === 'read-archive') return `fileinto "\${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
-    if (suffix === 'read-archive-stop') return `fileinto "\${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
-    if (suffix === 'expire') return `fileinto "\${ruleName}";\n  expire "day" "1";\n  stop;`;
+    if (suffix === 'default') return `fileinto "${ruleName}";`;
+    if (suffix === 'read') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";`;
+    if (suffix === 'read-stop') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
+    if (suffix === 'read-archive') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
+    if (suffix === 'read-archive-stop') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
+    if (suffix === 'expire') return `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
     if (suffix === 'reject') return `reject "This message was rejected by the mail delivery system.";\n  stop;`;
-    return `fileinto "\${ruleName}";`;
+    return `fileinto "${ruleName}";`;
 }
 
 export default app;
