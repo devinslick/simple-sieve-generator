@@ -460,58 +460,61 @@ app.get('/', (c) => {
               log('Tags replaced. Done.');
 
               // 6. Prune Empty Rules
-              // Remove blocks where "__IGNORE__" is the only thing in the list strings, OR where the conditions are effectively empty.
-              // Logic: Look for 'if anyof (...) { ... }' blocks.
-              // If ALL [{{LIST...}}] replacements inside the 'anyof' resulted in '__IGNORE__' (or generated empty lists), we remove the block.
+              // Remove blocks where "__IGNORE__" is the only thing in the list strings, OR inside known static headers.
               
-              const blockRegex = new RegExp('(?:#.*?\\\\n)?\\\\s*if (?:anyof|allof)\\\\s*\\\\(([\\\\s\\\\S]*?)\\\\)\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}', 'g');
+              // Improved regex to handle indented comments and blocks
+              const blockRegex = new RegExp('(?:^\\\\s*#.*?\\\\n)?\\\\s*if (?:anyof|allof)\\\\s*\\\\(([\\\\s\\\\S]*?)\\\\)\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}', 'gm');
+              
               content = content.replace(blockRegex, (fullBlock, conditionBody) => {
-                  // Check if the condition body contains ONLY "__IGNORE__" lists or empty lists
-                  // We do this by checking if there are ANY valid strings created.
-                  // The template generator produces '["A", "B"]' or '"__IGNORE__"'.
-                  
-                  // If the block contains at least one list that is NOT '["__IGNORE__"]' and NOT '""', keep it.
-                  // Actually, our replace logic above returns '"__IGNORE__"' (singular string).
-                  // So we look for any list presence '[...]' that contains something other than '__IGNORE__'.
-                  
-                  // Simplest check: Does the condition body contain any list '[...]'?
-                  // If yes, are ALL of them '["__IGNORE__"]'?
-                  
-                  // Count total list markers in this block (post-replacement)
                   const listMatches = conditionBody.match(new RegExp('\\\\\[(.*?)\\\\\]', 'g'));
                   
-                  if (!listMatches) {
-                      // No lists involved (e.g. spam check or simple header check), keep block
-                      return fullBlock;
-                  }
+                  if (!listMatches) return fullBlock;
                   
                   let hasActiveList = false;
                   
-                  // Static header lists that appear in templates but aren't user content variables
+                  // Static header lists that generally shouldn't count as "active content"
+                  // We strip quotes for comparison to be safe.
                   const ignoredHeaders = new Set([
-                      '"From"', '"Subject"', '"To"', '"Cc"', '"Bcc"', 
-                      '"Sender"', '"Resent-From"', '"Date"'
+                      'From', 'Subject', 'To', 'Cc', 'Bcc', 
+                      'Sender', 'Resent-From', 'Date',
+                      'X-Original-To', 'Delivered-To'
                   ]);
 
                   for (const listStr of listMatches) {
-                      // listStr is '["A", "B"]' or '["__IGNORE__"]' or '["From"]'
+                      // listStr example: '["A", "B"]' or '["__IGNORE__"]' or '["From"]'
                       
-                      // 1. Check if this list was explicitly ignored (empty user variable)
+                      // 1. Check for ignore placeholder
                       if (listStr.includes('"__IGNORE__"')) continue;
 
-                      // 2. Check if this is a static header list (e.g. ["From"])
-                      // Remove brackets and trim to check inner content
-                      const inner = listStr.replace(/^\[\s*|\s*\]$/g, '');
-                      if (ignoredHeaders.has(inner)) continue;
-
-                      // If we get here, it's a real list with valid content
-                      hasActiveList = true;
-                      break;
+                      // 2. Parse the list content
+                      // Remove brackets [ ]
+                      const innerContent = listStr.replace(/^\[\s*|\s*\]$/g, '');
+                      
+                      // Split by comma to handle multiple items like ["From", "Sender"]
+                      // If ALL items in the list are ignored headers, then the list is ignored.
+                      const items = innerContent.split(',').map(s => s.trim());
+                      
+                      let isListActive = false;
+                      for (const item of items) {
+                          // item is '"From"' or '"User String"'
+                          // Remove quotes
+                          const cleanItem = item.replace(/^"|"$/g, '');
+                          
+                          if (!ignoredHeaders.has(cleanItem)) {
+                              isListActive = true;
+                              break;
+                          }
+                      }
+                      
+                      if (isListActive) {
+                          // log('Active list found: ' + listStr);
+                          hasActiveList = true;
+                          break;
+                      }
                   }
                   
                   if (!hasActiveList) {
-                      // All lists in this block were ignored.
-                      console.log('Pruning empty block.');
+                      // log('Pruning block.');
                       return ''; 
                   }
                   
