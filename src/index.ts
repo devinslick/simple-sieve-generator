@@ -258,7 +258,8 @@ app.get('/', (c) => {
 
                  // 0. Check for Alias List Syntax: !alias1,alias2!CODE Pattern
                  // Example: !auto,credit!FRAS *
-                 const aliasMatch = line.match(/^!([^!]+)!([a-zA-Z0-9]+)(?:\s+(.+))?$/);
+                 // Allow whitespace around the separator !
+                 const aliasMatch = line.match(/^!\s*([^!]+)\s*!\s*([a-zA-Z0-9]+)(?:\s+(.+))?$/);
                  if (aliasMatch) {
                      const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
                      const code = aliasMatch[2].toUpperCase();
@@ -553,9 +554,9 @@ if allof (
               
               // IMPROVED REGEX:
               // 1. Matches optional comment lines preceding the block.
-              // 2. Matches `if anyof/allof (...) {`.
+              // 2. Matches 'if anyof/allof (...) {'.
               // 3. Matches body.
-              // 4. Matches closing brace `}` ONLY if it is at the start of a line (with optional whitespace).
+              // 4. Matches closing brace '}' ONLY if it is at the start of a line (with optional whitespace).
               // This prevents matchng too early on nested braces (mostly).
               
               const blockRegex = new RegExp('(?:^\\\\s*#.*?\\\\n)?\\\\s*if (?:anyof|allof)\\\\s*\\\\(([\\\\s\\\\S]*?)\\\\)\\\\s*\\\\{[\\\\s\\\\S]*?\\\\n\\\\s*\\\\}', 'gm');
