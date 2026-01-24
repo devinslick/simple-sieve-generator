@@ -15,22 +15,50 @@ app.get('/', (c) => {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
           :root {
+            /* Default: Dark Mode */
+            --primary: #3a8fd9;
+            --danger: #e74c3c;
+            --bg-body: #121212;
+            --bg-card: #1e1e1e;
+            --bg-input: #2d2d2d;
+            --border: #444;
+            --text: #e0e0e0;
+            --text-muted: #aaa;
+            --log-bg: #1a1a1a;
+          }
+          :root[data-theme="light"] {
+            /* Light Mode Overrides */
             --primary: #007bff;
             --danger: #dc3545;
-            --bg-light: #f8f9fa;
+            --bg-body: #ffffff;
+            --bg-card: #f8f9fa;
+            --bg-input: #ffffff;
             --border: #ccc;
-            --text: #333;
+            --text: #333333;
+            --text-muted: #666;
+            --log-bg: #f1f1f1;
           }
+
           * { box-sizing: border-box; }
           body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             max-width: 900px; 
             margin: 0 auto; 
             padding: 1rem;
+            background-color: var(--bg-body);
             color: var(--text);
             line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
           }
-          h1 { margin: 0 0 1.5rem 0; font-size: 1.75rem; }
+          h1 { margin: 0; font-size: 1.75rem; }
+          
+          /* Header Layout */
+          header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+          }
           
           /* Forms */
           label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem; }
@@ -42,6 +70,8 @@ app.get('/', (c) => {
             font-size: 1rem;
             margin-bottom: 1rem;
             font-family: inherit;
+            background-color: var(--bg-input);
+            color: var(--text);
           }
           textarea {
             min-height: 200px;
@@ -58,8 +88,8 @@ app.get('/', (c) => {
             font-size: 1rem;
             font-weight: 500;
             transition: opacity 0.2s;
-            background-color: #e9ecef;
-            color: #333;
+            background-color: var(--border); /* Default btn bg */
+            color: var(--text);
           }
           button:hover { opacity: 0.9; }
           .btn-primary { background-color: var(--primary); color: white; }
@@ -67,11 +97,11 @@ app.get('/', (c) => {
           
           /* Layout Components */
           .card {
-            background: var(--bg-light);
+            background: var(--bg-card);
             padding: 1.25rem;
             border-radius: 8px;
             margin-bottom: 1.5rem;
-            border: 1px solid #eee;
+            border: 1px solid var(--border);
           }
           
           .controls-row {
@@ -85,14 +115,28 @@ app.get('/', (c) => {
           .log-box {
             font-family: monospace; 
             font-size: 0.85em; 
-            color: #444; 
-            background: #f1f1f1; 
+            color: var(--text-muted); 
+            background: var(--log-bg); 
             padding: 1rem; 
             border-radius: 6px; 
             border: 1px solid var(--border);
             max-height: 300px; 
             overflow-y: auto;
             white-space: pre-wrap;
+          }
+
+          /* Theme Toggle */
+          .theme-toggle {
+            background: none;
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
           }
 
           /* Responsive */
@@ -105,6 +149,31 @@ app.get('/', (c) => {
         </style>
         <script>
             // --- UI LOGIC ---
+            function initTheme() {
+                const stored = localStorage.getItem('theme');
+                if (stored) {
+                    document.documentElement.setAttribute('data-theme', stored);
+                } else {
+                    // Default is Dark (no attribute needed as per :root)
+                    // If we want to be explicit or respect system:
+                    // document.documentElement.setAttribute('data-theme', 'dark');
+                }
+                updateThemeIcon();
+            }
+
+            function toggleTheme() {
+                const current = document.documentElement.getAttribute('data-theme');
+                const next = current === 'light' ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                updateThemeIcon();
+            }
+
+            function updateThemeIcon() {
+                const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                document.getElementById('themeIcon').textContent = isLight ? '🌙' : '☀️';
+            }
+
             async function loadListNames() {
                 try {
                     const res = await fetch('/api/lists');
@@ -190,11 +259,19 @@ app.get('/', (c) => {
             }
             
             // Init
-            window.onload = loadListNames;
+            window.onload = () => {
+                initTheme();
+                loadListNames();
+            };
         </script>
       </head>
       <body>
-        <h1>Simple Sieve Generator</h1>
+        <header>
+            <h1>Simple Sieve Generator</h1>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+                <span id="themeIcon">☀️</span>
+            </button>
+        </header>
         
         <div class="card">
              <label for="savedLists">Load/Manage Saved List:</label>
@@ -218,7 +295,7 @@ app.get('/', (c) => {
         <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
         
         <label>Generated Output:</label>
-        <textarea id="genOutput" placeholder="Generated script will appear here..." readonly style="background: #fafafa;"></textarea>
+        <textarea id="genOutput" placeholder="Generated script will appear here..." readonly style="background: var(--bg-input); color: var(--text);"></textarea>
         
         <div id="genLogs" class="log-box">Ready.</div>
       </body>
