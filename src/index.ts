@@ -38,19 +38,49 @@ app.get('/', (c) => {
             }
 
             async function saveCurrentList() {
-                const name = prompt("Enter a name for this list:");
-                if(!name) return;
+                // Use Folder Name field for list name
+                const name = document.getElementById('folderName').value.trim();
+                
+                if(!name) {
+                    alert("Please enter a Folder Name to save this list.");
+                    return;
+                }
+                
                 const content = document.getElementById('rulesInput').value;
                 try {
                     await fetch(\`/api/lists/\${name}\`, { method: 'PUT', body: content });
-                    alert('Saved!');
-                    loadListNames();
+                    alert('Saved as "' + name + '"!');
+                    loadListNames(); 
+                    // Set dropdown to this new name if exists
+                    document.getElementById('savedLists').value = name;
                 } catch(e) { alert('Error saving: ' + e.message); }
+            }
+            
+            async function deleteCurrentList() {
+                const name = document.getElementById('savedLists').value;
+                if(!name) {
+                    alert("No list selected to delete.");
+                    return;
+                }
+                
+                if(!confirm('Are you sure you want to delete the list "' + name + '"?')) return;
+                
+                try {
+                    await fetch(\`/api/lists/\${name}\`, { method: 'DELETE' });
+                    alert('Deleted!');
+                    loadListNames();
+                    document.getElementById('rulesInput').value = '';
+                    document.getElementById('folderName').value = '';
+                } catch(e) { alert('Error deleting: ' + e.message); }
             }
 
             async function loadSelectedList() {
                 const name = document.getElementById('savedLists').value;
                 if(!name) return;
+                
+                // Update Folder Name input match selected list
+                document.getElementById('folderName').value = name;
+                
                 const res = await fetch(\`/api/lists/\${name}\`);
                 if(res.ok) {
                     document.getElementById('rulesInput').value = await res.text();
@@ -87,15 +117,16 @@ app.get('/', (c) => {
         <h1>Simple Sieve Generator</h1>
         
         <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
-             <label><strong>Load Saved List:</strong></label><br>
+             <label><strong>Load/Manage Saved List:</strong></label><br>
              <div style="display:flex; gap: 10px;">
                  <select id="savedLists" onchange="loadSelectedList()"></select>
                  <button onclick="saveCurrentList()">Save Current</button>
+                 <button onclick="deleteCurrentList()" style="background-color: #dc3545; color: white;">Delete Selected</button>
              </div>
         </div>
 
         <div>
-          <label><strong>Folder Name (e.g. "Shopping"):</strong></label><br>
+          <label><strong>Folder Name / List Name (e.g. "Shopping"):</strong></label><br>
           <input type="text" id="folderName" value="Shopping" style="width: 100%; box-sizing: border-box; padding: 0.5rem;">
         </div>
         <br>
@@ -136,6 +167,13 @@ app.put('/api/lists/:name', async (c) => {
     const name = c.req.param('name');
     const content = await c.req.text();
     await c.env.SIEVE_DATA.put('list:' + name, content);
+    return c.json({ success: true });
+});
+
+
+app.delete('/api/lists/:name', async (c) => {
+    const name = c.req.param('name');
+    await c.env.SIEVE_DATA.delete('list:' + name);
     return c.json({ success: true });
 });
 
