@@ -551,8 +551,14 @@ if allof (
               // 6. Prune Empty Rules
               // Remove blocks where "__IGNORE__" is the only thing in the list strings, OR inside known static headers.
               
-              // Improved regex to handle indented comments and blocks
-              const blockRegex = new RegExp('(?:^\\\\s*#.*?\\\\n)?\\\\s*if (?:anyof|allof)\\\\s*\\\\(([\\\\s\\\\S]*?)\\\\)\\\\s*\\\\{[\\\\s\\\\S]*?\\\\}', 'gm');
+              // IMPROVED REGEX:
+              // 1. Matches optional comment lines preceding the block.
+              // 2. Matches `if anyof/allof (...) {`.
+              // 3. Matches body.
+              // 4. Matches closing brace `}` ONLY if it is at the start of a line (with optional whitespace).
+              // This prevents matchng too early on nested braces (mostly).
+              
+              const blockRegex = new RegExp('(?:^\\\\s*#.*?\\\\n)?\\\\s*if (?:anyof|allof)\\\\s*\\\\(([\\\\s\\\\S]*?)\\\\)\\\\s*\\\\{[\\\\s\\\\S]*?\\\\n\\\\s*\\\\}', 'gm');
               
               content = content.replace(blockRegex, (fullBlock, conditionBody) => {
                   const listMatches = conditionBody.match(new RegExp('\\\\\[(.*?)\\\\\]', 'g'));
@@ -561,8 +567,6 @@ if allof (
                   
                   let hasActiveList = false;
                   
-                  // Static header lists that generally shouldn't count as "active content"
-                  // We strip quotes for comparison to be safe.
                   const ignoredHeaders = new Set([
                       'From', 'Subject', 'To', 'Cc', 'Bcc', 
                       'Sender', 'Resent-From', 'Date',
@@ -570,25 +574,14 @@ if allof (
                   ]);
 
                   for (const listStr of listMatches) {
-                      // listStr example: '["A", "B"]' or '["__IGNORE__"]' or '["From"]'
-                      
-                      // 1. Check for ignore placeholder
                       if (listStr.includes('"__IGNORE__"')) continue;
 
-                      // 2. Parse the list content
-                      // Remove brackets [ ]
                       const innerContent = listStr.replace(/^\[\s*|\s*\]$/g, '');
-                      
-                      // Split by comma to handle multiple items like ["From", "Sender"]
-                      // If ALL items in the list are ignored headers, then the list is ignored.
                       const items = innerContent.split(',').map(s => s.trim());
                       
                       let isListActive = false;
                       for (const item of items) {
-                          // item is '"From"' or '"User String"'
-                          // Remove quotes
                           const cleanItem = item.replace(/^"|"$/g, '');
-                          
                           if (!ignoredHeaders.has(cleanItem)) {
                               isListActive = true;
                               break;
@@ -596,19 +589,99 @@ if allof (
                       }
                       
                       if (isListActive) {
-                          // log('Active list found: ' + listStr);
                           hasActiveList = true;
                           break;
                       }
                   }
                   
                   if (!hasActiveList) {
-                      // log('Pruning block.');
                       return ''; 
                   }
                   
                   return fullBlock;
               });
+
+              // 6.5 Fix Broken Blocks (Nested Pruning Artifacts)
+              // Sometimes pruning leaves weird artifacts like '}";' if braces were mismatched or nested incorrectly.
+              // Also check for the example provided: '}"; addflag "\\Seen"; }'
+              // This suggests the regex didn't capture the FULL block because of nested curlies or something.
+              // The regex provided earlier for blockRegex matches '([\\s\\S]*?)' (lazy) inside braces? No: \\(([\\s\\S]*?)\\)\\s*\\{[\\s\\S]*?\\}
+              // The curly brace matching part `\\{[\\s\\S]*?\\}` is LAZY. It stops at the FIRST closing brace.
+              // This is catastrophic for nested blocks (like our new Dynamic Blocks inside the Alias section, or template structures).
+              
+              // We need a balanced brace matcher or a smarter regex.
+              // Since JS regex doesn't support recursion, we must be careful.
+              // HOWEVER, Sieve generally doesn't have deeply nested structures in these templates commonly, EXCEPT for "if ... { ... }" inside other blocks.
+              
+              // The user's output shows:
+              // if ... { ... }"; ... }
+              // This confirms the lazy `}` match stopped early.
+              
+              // REVERTING TO A SAFER PRUNING STRATEGY:
+              // Instead of regex replacing the whole block, let's just replace the block content with empty string IF we are sure?
+              // Or better: Iterate carefully.
+              
+              // Actually, simply making the curly brace part greedy `\\{[\\s\\S]*\\}` matches until the end of the file. That's bad.
+              
+              // Quick Fix: Allow one level of nesting or look for specific structure.
+              // Or, since we know these generated rules follow a strict indentation/format pattern `   }` at start of line?
+              
+              // Let's rely on the fact that Sieve blocks in this template usually end with `^}` (start of line).
+              // New Regex: Match from `if` until a closing brace that appears at the start of a line (or indented).
+              
+              // But wait, the issue is fundamental to using regex for parsing nested code.
+              // The provided example shows the breakage happened.
+
+              // Let's refine the Pruning Regex to be more specific to our template's style.
+              // Our templates use:
+              // if ... {
+              //   ...
+              // }
+              
+              // We can match `}` followed by optional whitespace and newline.
+              
+              // But first, let's fix the Broken Output caused by the regex matching too little.
+              
+              // Why did the user's output show `!auto,...!FRASD deal` INSIDE the Subject list?
+              // Content: ["auto,credit,entertainment,... deal"]
+              // This means the `parseRulesList` logic FAILED to identify the `!...!FRASD` line as an alias line.
+              // It fell through to the default logic:
+              //   Default logic sees `!auto...` -> Starts with `!`, so Scope = Scoped.
+              //   Type = Subject (default).
+              //   Bucket = Default (default).
+              //   So it put the WHOLE LINE into `scoped-subject-default`.
+              
+              // WHY did the alias regex fail?
+              // The line was: `!auto,credit,...!FRASD deal`
+              // The regex: `^!([^!]+)!([a-zA-Z0-9]+)(?:\\s+(.+))?$`
+              // Matches `!auto...!` -> Group 1 `auto...`
+              // Matches `FRASD` -> Group 2 `FRASD`
+              // Matches ` deal` -> Group 3 `deal`
+              // It SHOULD match.
+              
+              // Ah, the user's input might have had extra spaces or hidden characters?
+              // The user provided: `!auto,credit,entertainment,food,receipt,service,services,shop,travel,streaming,shopping!FRASD deal`
+              // Wait. `FRASD` is 5 chars. `[a-zA-Z0-9]+`.
+              // Maybe the issue is `split('\\n')` handling carriage returns? `\r`?
+              // I added `line = line.trim()` so that should be fine.
+              
+              // Let's look closely at `parseRulesList` again.
+              // If `parseRulesList` matched it, `continue` would be hit, and it wouldn't reach the "Scoped | Subject" part.
+              // It clearly DID reach the "Scoped | Subject" part.
+              // So `aliasMatch` was null.
+              
+              // Does the regex `^!([^!]+)!` match commas? `[^!]+` means "anything not an exclamation mark". Yes.
+              
+              // Maybe strict whitespace?
+              // Let's make the regex more permissive.
+              // `const aliasMatch = line.match(/^!([^!]+)!(\w+)(?:\s+(.*))?$/);`
+              // `\w` is `[a-zA-Z0-9_]`.
+              // `.*` instead of `.+`.
+
+              // Also, let's fix the Pruning Regex Lazy Match issue.
+              // We'll require the closing brace to be on its own line (possibly indented).
+              // `\\n\\s*\\}`
+
 
               // 7. Cleanup extra newlines
               content = content.replace(/\\n\s*\\n\s*\\n/g, '\\n\\n');
