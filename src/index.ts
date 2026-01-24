@@ -604,50 +604,6 @@ if allof (
 
               // 6.5 Fix Broken Blocks (Nested Pruning Artifacts)
               // Sometimes pruning leaves weird artifacts if braces were mismatched or nested incorrectly.
-              
-              // REVERTING TO A SAFER PRUNING STRATEGY:
-              // Instead of regex replacing the whole block, let's just replace the block content with empty string IF we are sure?
-              // Or better: Iterate carefully.
-              
-              // Actually, simply making the curly brace part greedy `\\{[\\s\\S]*\\}` matches until the end of the file. That's bad.
-              
-              // Quick Fix: Allow one level of nesting or look for specific structure.
-              // Or, since we know these generated rules follow a strict indentation/format pattern `   }` at start of line?
-              
-              // Let's rely on the fact that Sieve blocks in this template usually end with `^}` (start of line).
-              // New Regex: Match from `if` until a closing brace that appears at the start of a line (or indented).
-              
-              // But wait, the issue is fundamental to using regex for parsing nested code.
-              // The provided example shows the breakage happened.
-
-              // Let's refine the Pruning Regex to be more specific to our template's style.
-              // Our templates use:
-              // if ... {
-              //   ...
-              // }
-              
-              // We can match `}` followed by optional whitespace and newline.
-              
-              // But first, let's fix the Broken Output caused by the regex matching too little.
-              
-              // Why did the user's output show `!auto,...!FRASD deal` INSIDE the Subject list?
-              // Content: ["auto,credit,entertainment,... deal"]
-              // This means the `parseRulesList` logic FAILED to identify the `!...!FRASD` line as an alias line.
-              // It fell through to the default logic:
-              //   Default logic sees `!auto...` -> Starts with `!`, so Scope = Scoped.
-              //   Type = Subject (default).
-              //   Bucket = Default (default).
-              //   So it put the WHOLE LINE into `scoped-subject-default`.
-              
-              // WHY did the alias regex fail?
-              // The line was: `!auto,credit,...!FRASD deal`
-              // The regex: `^!([^!]+)!([a-zA-Z0-9]+)(?:\\s+(.+))?$`
-              // Matches `!auto...!` -> Group 1 `auto...`
-              // Matches `FRASD` -> Group 2 `FRASD`
-              // Matches ` deal` -> Group 3 `deal`
-              // It SHOULD match.
-              
-              // Ah, the user's input might have had extra spaces or hidden characters?
               // The user provided: `!auto,credit,entertainment,food,receipt,service,services,shop,travel,streaming,shopping!FRASD deal`
               // Wait. `FRASD` is 5 chars. `[a-zA-Z0-9]+`.
               // Maybe the issue is `split('\\n')` handling carriage returns? `\r`?
