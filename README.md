@@ -5,7 +5,7 @@ A Cloudflare Worker-based web app to manage Sieve email filtering lists and gene
 ## Features
 - **Cloudflare Workers**: Serverless compute.
 - **Hono**: Fast, lightweight web framework.
-- **Cloudflare KV**: Storage for exclusion lists and templates (Designed to run within the Cloudflare Workers Free Tier).
+- **Cloudflare KV**: Storage for exclusion lists (Designed to run within the Cloudflare Workers Free Tier).
 - **Auto-Deployment**: GitHub Actions workflow included.
 
 ## Security (Important!)
@@ -65,6 +65,8 @@ Go to your GitHub Repository **Settings > Secrets and variables > Actions** and 
 Once these are set, pushing to the `main` branch will automatically inject these IDs into the configuration and deploy your worker.
 
 ### Usage
-- Visit the app URL (e.g., `https://simple-sieve-generator.devin.workers.dev`).
-- Create/Edit lists (e.g., `exclusions/global.txt`) using the web UI.
-- Files within this repo under examples/lists and examples/templates will be automatically uploaded to your KV store on deployment.
+1. **Access UI**: Visit your deployed URL.
+2. **Manage Lists**: Create, Save, and Load rule lists.
+3. **Write Rules**: Use the shorthand syntax (see `LEGEND.md`).
+4. **Generate**: Click "Generate Sieve Script" to produce the standard Sieve code.
+5. **Sync**: Files under `examples/lists` are auto-uploaded on deploy.

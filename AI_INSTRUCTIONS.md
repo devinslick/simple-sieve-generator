@@ -12,7 +12,7 @@ This project is a Cloudflare Worker application built with Hono and TypeScript. 
 ## Key Technologies
 - **Cloudflare Workers**: Serverless runtime.
 - **Hono**: Web framework for the worker.
-- **Cloudflare KV**: Key-Value storage used to store lists and templates.
+- **Cloudflare KV**: Key-Value storage used to store lists.
 - **Wrangler**: CLI for development and deployment.
 
 ## Security & Configuration Policy
@@ -28,8 +28,7 @@ This project is a Cloudflare Worker application built with Hono and TypeScript. 
 5. **Testing**: Testing will be done entirely in the github CI. Do not rely on local testing with npx/node.
 
 ## Future Roadmap (Todo)
-- **Template Management**: Ability to create and link (sieve rule <-> template).
-- **Sieve Generation**: Logic to compile the stored lists and templates into valid Sieve scripts.
+- **Sieve Generation**: Logic to compile the stored lists into valid Sieve scripts.
 - **Authentication**: Currently open; needs basic auth or Cloudflare Access protection if exposed publicly.
 
 ## Common Tasks

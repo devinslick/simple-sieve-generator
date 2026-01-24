@@ -54,36 +54,24 @@ The text to match against the header.
 - **Literal**: If no wildcards are present, the system uses the Sieve `:contains` comparator.
 
 ### 5. ALIAS MAPPING (Special)
-Defines a list of aliased addresses that should target this rule folder using `X-Original-To`. This is specific to the `default` template.
+Defines a list of aliased addresses that should target this rule folder using `X-Original-To`.
 
 *   **Syntax**: `!alias1,alias2,...!CODE [PATTERN]`
 *   **Example**: `!auto,credit,receipts!FRAS *`
     *   **Meaning**: If email is sent to `auto` OR `credit` OR `receipts`, apply action `FRAS`.
-    *   **Note**: The **PATTERN** is currently ignored for Alias rules. These rules are designed for **Mailbox Routing**, meaning they route *all* mail sent to the specified aliases.
+    *   **Note**: The **PATTERN** is currently ignored for Alias rules. These rules are designed for **Mailbox Routing**.
 
 ### 6. CUSTOMIZING DESIGNATED ACTIONS (FRASD)
 The `FRASD` code requires a label argument (e.g., `deal`).
 - **Syntax**: `!alias1,alias2!FRASD label`
-- **Mapping**: This maps to the template variable `aliases-label`.
-- **Usage**: You must ensure your template handles the specific label you choose.
+- **Behavior**: Moves email to a custom folder named `label`, marks read, and archives.
 
 **Example**:
 1. You write a rule: `!shop1,shop2!FRASD shopping`
-   - This groups these aliases into a variable named `aliases-shopping`.
-2. You must ensure your **Template** includes a block to handle this variable and define the folder:
-   ```sieve
-   # Handle 'shopping' aliases
-   if anyof (
-     header :contains "X-Original-To" [{{LIST:aliases-shopping:contains}}],
-     header :matches "X-Original-To" [{{LIST:aliases-shopping:matches}}]
-   ) {
-       fileinto "Shopping"; /* You define the folder name here */
-       addflag "\\Seen";
-       fileinto "archive";
-       stop;
-   }
-   ```
-   *If the template doesn't reference `aliases-shopping`, the rule will be ignored.*
+   - Checks if `X-Original-To` is `shop1` or `shop2`.
+   - Files to folder "Shopping".
+   - Marks as Read.
+   - Archives.
 
 ## Examples
 
