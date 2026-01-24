@@ -603,20 +603,7 @@ if allof (
               });
 
               // 6.5 Fix Broken Blocks (Nested Pruning Artifacts)
-              // Sometimes pruning leaves weird artifacts like '}";' if braces were mismatched or nested incorrectly.
-              // Also check for the example provided: '}"; addflag "\\Seen"; }'
-              // This suggests the regex didn't capture the FULL block because of nested curlies or something.
-              // The regex provided earlier for blockRegex matches '([\\s\\S]*?)' (lazy) inside braces? No: \\(([\\s\\S]*?)\\)\\s*\\{[\\s\\S]*?\\}
-              // The curly brace matching part `\\{[\\s\\S]*?\\}` is LAZY. It stops at the FIRST closing brace.
-              // This is catastrophic for nested blocks (like our new Dynamic Blocks inside the Alias section, or template structures).
-              
-              // We need a balanced brace matcher or a smarter regex.
-              // Since JS regex doesn't support recursion, we must be careful.
-              // HOWEVER, Sieve generally doesn't have deeply nested structures in these templates commonly, EXCEPT for "if ... { ... }" inside other blocks.
-              
-              // The user's output shows:
-              // if ... { ... }"; ... }
-              // This confirms the lazy `}` match stopped early.
+              // Sometimes pruning leaves weird artifacts if braces were mismatched or nested incorrectly.
               
               // REVERTING TO A SAFER PRUNING STRATEGY:
               // Instead of regex replacing the whole block, let's just replace the block content with empty string IF we are sure?
