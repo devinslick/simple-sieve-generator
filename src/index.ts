@@ -324,7 +324,11 @@ function parseRulesList(rawText) {
              else if (code === 'B') suffix = 'reject';
              else if (code === 'FRASD') {
                  if (!args) continue;
-                 suffix = args.toLowerCase();
+                 suffix = args.trim();
+             }
+             else if (code === 'FSD') {
+                 if (!args) continue;
+                 suffix = 'fsd:' + args.trim();
              }
              const key = 'aliases:' + suffix;
              if (!buckets[key]) buckets[key] = [];
@@ -457,8 +461,13 @@ function generateSieveScript(folderName, buckets) {
             if (suffix === 'default') body = `fileinto "${ruleName}";`;
             else if (suffix === 'read') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";`;
             else if (suffix === 'read-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
-            else if (suffix === 'read-archive') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
-            else if (suffix === 'read-archive-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
+            else if (suffix.startsWith('fsd:')) {
+                const label = suffix.substring(4).trim(); // remove 'fsd:'
+                body = `fileinto "${label}";\n  stop;`;
+            }
+            else {
+                // Default Custom (FRASD behavior)
+                const label = suffixame}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
             else if (suffix === 'expire') body = `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
             else if (suffix === 'reject') body = `reject "This message was rejected by the mail delivery system.";\n  stop;`;
             else {
