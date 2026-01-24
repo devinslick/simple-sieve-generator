@@ -461,17 +461,16 @@ function generateSieveScript(folderName, buckets) {
             if (suffix === 'default') body = `fileinto "${ruleName}";`;
             else if (suffix === 'read') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";`;
             else if (suffix === 'read-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
+            else if (suffix === 'read-archive') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
+            else if (suffix === 'read-archive-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
+            else if (suffix === 'expire') body = `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
+            else if (suffix === 'reject') body = `reject "This message was rejected by the mail delivery system.";\n  stop;`;
             else if (suffix.startsWith('fsd:')) {
-                const label = suffix.substring(4).trim(); // remove 'fsd:'
+                const label = suffix.substring(4).trim();
                 body = `fileinto "${label}";\n  stop;`;
             }
             else {
-                // Default Custom (FRASD behavior)
-                const label = suffixame}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
-            else if (suffix === 'expire') body = `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
-            else if (suffix === 'reject') body = `reject "This message was rejected by the mail delivery system.";\n  stop;`;
-            else {
-                const label = suffix.charAt(0).toUpperCase() + suffix.slice(1);
+                const label = suffix;
                 body = `fileinto "${label}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
             }
             
