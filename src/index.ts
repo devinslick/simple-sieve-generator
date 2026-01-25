@@ -427,11 +427,117 @@ app.post('/generate', async (c) => {
 
 // --- Logic ---
 
+
+// --- Helper Parsing Logic ---
+
+function parseDSL(token) {
+    if (!token) return null;
+    
+    let temp = token;
+    let label = null;
+    let expireRaw = null;
+    
+    // Extract inline label: !label!
+    const labelMatch = temp.match(/!([\w-]+)!/);
+    if (labelMatch) {
+         label = labelMatch[1];
+         temp = temp.replace(labelMatch[0], '');
+    }
+    
+    // Extract expiration: xN[dh]
+    const expireMatch = temp.match(/x(\d+)([dh]?)/i);
+    if (expireMatch) {
+        expireRaw = { val: expireMatch[1], unit: expireMatch[2] };
+        temp = temp.replace(expireMatch[0], '');
+    }
+    
+    // Check for "fsd:..." legacy pattern if token started with "fsd:"? 
+    // No, standard loop splits by space. "fsd:label" is one token?
+    // User syntax "FRASD label" is separate. "FSD label" is separate.
+    // If token is "FSD", it is solely F,S,D flags.
+    
+    // Verify remaining characters are only flags [F, R, A, S, B, D]
+    // Allowing case-insensitive
+    if (temp.length > 0 && !/^[frasbd]+$/i.test(temp)) {
+        return null; // Contains invalid chars
+    }
+    
+    const flags = {
+        F: /f/i.test(temp),
+        R: /r/i.test(temp),
+        A: /a/i.test(temp),
+        S: /s/i.test(temp),
+        B: /b/i.test(temp),
+        D: /d/i.test(temp)
+    };
+    
+    // Legacy support: "F" implies File. "B" implies Reject.
+    // If ONLY Expiration was matched (e.g. "x1h"), assume File?
+    // "x1h" -> temp="" -> flags.F = false.
+    // We should probably default F=true unless B is present?
+    // Or just encode exactly what was found and let generator decide defaults.
+    // However, "x1h" usually means "File and Expire".
+    // "R" means "File and Read".
+    // So if B is NOT present, F is usually implicit?
+    // But "A" (Archive) might mean *only* archive? No, usually "A" is separate from "F".
+    // "F" is file-into-target. "A" is file-into-archive.
+    // "FRA" -> File + Read + Archive.
+    // "RA" -> Read + Archive (Maybe no File?).
+    // "x1h" -> Expire + File?
+    
+    // Let's rely on explicit 'F' in token OR defaults.
+    // If token matched standard code logic before (e.g. "FR"), it had F.
+    // If "x1h", previously it was FX1h -> F is explicit.
+    // If user types "x2h", is that valid? Matches logic.
+    // Let's assume File is implicit if not Rejected/Bounced, 
+    // OR we only set F if 'f' is in string.
+    // BUT! The user said "AFx2h". Explicit A, F.
+    // If they type "Ax2h", maybe they don't want File?
+    // I will stick to explicit parsing.
+    
+    return {
+        flags,
+        expire: expireRaw,
+        label,
+        hasFlags: (temp.length > 0 || label !== null || expireRaw !== null)
+    };
+}
+
+function canonicalSuffix(dsl) {
+    if (!dsl) return 'default';
+    
+    const parts = [];
+    
+    // Flags
+    if (dsl.flags.F) parts.push('F');
+    if (dsl.flags.R) parts.push('R');
+    if (dsl.flags.A) parts.push('A');
+    if (dsl.flags.S) parts.push('S');
+    if (dsl.flags.B) parts.push('B');
+    if (dsl.flags.D) parts.push('D');
+    
+    // Expire
+    if (dsl.expire) {
+        const u = (dsl.expire.unit || 'd').toLowerCase().startsWith('h') ? 'h' : 'd';
+        parts.push(`X-${dsl.expire.val}-${u}`);
+    }
+    
+    // Label
+    if (dsl.label) {
+        parts.push(`L-${dsl.label}`);
+    }
+    
+    if (parts.length === 0) return 'default'; // Should match explicit "F"? No F is flag.
+    // If empty (e.g. code ""), default.
+    
+    return 'auto:' + parts.join('_');
+}
+
 function parseRulesList(rawText) {
     const lines = rawText.split('\n');
     
     const context = {
-        scope: 'global', // 'global' or 'scoped'
+        scope: 'global', 
     };
     
     const buckets = {};
@@ -440,55 +546,65 @@ function parseRulesList(rawText) {
         line = line.trim();
         if (!line || line.startsWith('#')) continue;
 
-        // Alias Check (Stateless)
-        const aliasMatch = line.match(/^!([^!]+)!(\w+)(?:\s+(.+))?$/);
+        // Alias Logic
+        // Regex to extract alias part first: !alias1,alias2! ... rest
+        let aliasMatch = line.match(/^!([^!]+)!(.*)$/);
         if (aliasMatch) {
              const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
-             const code = aliasMatch[2].toUpperCase();
-             const args = aliasMatch[3] ? aliasMatch[3].trim() : '';
-             let suffix = 'default';
+             const rest = aliasMatch[2].trim();
              
-             // --- FIX: Logic correction for handling suffix assignment ---
-             if (['F', 'STOP', 'S', '>'].includes(code)) suffix = 'default';
-             else if (code === 'FR') suffix = 'read';
-             else if (code === 'FRS') suffix = 'read-stop';
-             else if (code === 'FRA') suffix = 'read-archive';
-             else if (code === 'FRAS') suffix = 'read-archive-stop';
-             else if (code === 'FX1') suffix = 'expire'; // Keep for compat, though regex covers it
-             else if (code === 'B') suffix = 'reject';
-             else if (code === 'FRASD') {
-                 if (!args) continue;
-                 suffix = args.trim();
-             }
-             else if (code === 'FSD') {
-                 if (!args) continue;
-                 suffix = 'fsd:' + args.trim();
-             }
-             else {
-                 // Check for dynamic Expire (FX...) or Read-Expire (FRX...)
-                 const expireMatch = code.match(/^(F)(R?)(X)(\d+)([DH]?)$/);
-                 if (expireMatch) {
-                     // Groups: 1=F, 2=R(opt), 3=X, 4=Digits, 5=Unit(opt)
-                     const isRead = expireMatch[2] === 'R';
-                     const num = expireMatch[4];
-                     const unit = expireMatch[5] === 'H' ? 'hour' : 'day';
-                     suffix = `expire:${num}:${unit}${isRead ? ':read' : ''}`;
-                 } else {
-                     // ... existing fallthrough logic
-                     const legacyFx1 = code === 'FX1';
-                     if (legacyFx1) {
-                        suffix = 'expire'; // Legacy
-                     }
+             // Now parse 'rest' for code + args.
+             // e.g. "AFx2h remainder"
+             // or "Fx1"
+             const parts = rest.split(/\s+/);
+             const possibleCode = parts[0];
+             const dsl = parseDSL(possibleCode);
+             
+             let suffix = 'default';
+             let matchArgs = rest;
+             
+             if (dsl && dsl.hasFlags) {
+                 suffix = canonicalSuffix(dsl);
+                 // If the code was the first part, remove it from args
+                 matchArgs = rest.substring(possibleCode.length).trim();
+                 
+                 // Support 'fsd' legacy separate arg for label? "FRASD label"
+                 // If 'D' flag is present but no inline label, treat next word as label?
+                 // User asked for "!test!" inline.
+                 // If they type "FRASD label", 'D' is set.
+                 // My new parser supports explicit !label!.
+                 // If I want to support legacy "FRASD label":
+                 if (dsl.flags.D && !dsl.label && parts[1]) {
+                     // Steal next part as label
+                     const labelArg = parts[1];
+                     // Re-generate suffix with label
+                     dsl.label = labelArg;
+                     suffix = canonicalSuffix(dsl); // Now includes L-label
+                     matchArgs = rest.substring(possibleCode.length + 1 + labelArg.length).trim();
                  }
+             } else {
+                 // No valid code found?
+                 // Existing logic: defaulted to 'default'.
+                 // If standard alias "!alias!target", target is args, code fallsback to default?
+                 // Wait, standard alias is "!alias!CODE args".
+                 // If I type "!alias!user@email.com", is "user@email.com" a code? No.
+                 // So "user@email.com" is matched as args?
+                 // And suffix is 'default'?
+                 // Yes.
              }
-
+             
+             // One edge case: "FSD label".
+             // parseDSL("FSD") -> Flags F, S, D.
+             // D present, no inline label.
+             // Check parts[1].
+             
              const key = 'aliases:' + suffix;
              if (!buckets[key]) buckets[key] = [];
              buckets[key].push(...aliases);
              continue; 
         }
 
-        // Scope Switching Commands
+        // Scope Switching
         if (line === '!' || line === 'scoped') {
             context.scope = 'scoped';
             continue;
@@ -498,18 +614,13 @@ function parseRulesList(rawText) {
             continue;
         }
         
-        // Single line handling
-        // If line starts with "!", explicit scope switch for this line?
-        // Original logic: "if (line.startsWith('!')) { scope = 'scoped'; line = line.substring(1)... }"
         let currentScope = context.scope;
         let currentLine = line;
         
         if (currentLine.startsWith('!')) {
             currentScope = 'scoped';
             currentLine = currentLine.substring(1).trim();
-            // If line was just "!", we already handled it? No, if "!" is followed by content.
             if (!currentLine) {
-                // Just a switch
                 context.scope = 'scoped';
                 continue;
             }
@@ -524,64 +635,31 @@ function parseRulesList(rawText) {
             currentLine = currentLine.substring(5).trim();
         }
 
-        // Parse Code
-        let bucketSuffix = 'default';
+        // Parse Code from Rule Line
+        // "Subject String CODE" or "CODE Subject String"
+        let bucketSuffix = 'auto:F'; // Default to File
+        
         const parts = currentLine.split(/\s+/);
-        const possibleCode = parts[0] ? parts[0].toUpperCase() : '';
-        const standardCodes = ['F', 'STOP', 'S', '>', 'FR', 'FRS', 'FRA', 'FRAS', 'FX1', 'B'];
-        const isCode = (s) => standardCodes.includes(s) || /^FX(\d+)([DH]?)$/.test(s);
+        const first = parts[0];
+        const last = parts.length > 0 ? parts[parts.length - 1] : '';
+        
+        const dslFirst = parseDSL(first);
+        const dslLast = parseDSL(last);
         
         let matchString = currentLine;
         
-        // Check if starts with code (Example: "F String" - wait, does user type code first?)
-        // Legend says: "Subject String CODE" -> Code is LAST.
-        // But logic says: "if includes(code)"... 
-        // Let's support BOTH.
-        
-        // Check LAST part first (Common usage usually "Subject matchstring F")
-        const lastPart = parts.length > 0 ? parts[parts.length - 1].toUpperCase() : '';
-        if (isCode(lastPart)) {
-             bucketSuffix = mapCodeToSuffix(lastPart, type);
-             matchString = currentLine.substring(0, currentLine.length - lastPart.length).trim();
-        } else if (isCode(possibleCode)) {
-             // Check FIRST part
-             bucketSuffix = mapCodeToSuffix(possibleCode, type);
-             matchString = currentLine.substring(possibleCode.length).trim();
+        // Prefer LAST if valid (standard "Pattern CODE")
+        if (dslLast && dslLast.hasFlags) {
+             bucketSuffix = canonicalSuffix(dslLast);
+             matchString = currentLine.substring(0, currentLine.length - last.length).trim();
+        } else if (dslFirst && dslFirst.hasFlags) {
+             bucketSuffix = canonicalSuffix(dslFirst);
+             matchString = currentLine.substring(first.length).trim();
         }
-        
-        // --- ADDITION: If it's an alias rule that slipped through? --- 
-        // No, alias rules start with !alias! which is handled at top of loop.
         
         const key = `${currentScope}-${type}-${bucketSuffix}`;
         if (!buckets[key]) buckets[key] = [];
-        // Treat the rest of the line as a single pattern (preserve commas)
         const item = matchString.trim();
-        
-        // --- FIX: Check for !alias! patterns inside Global/Scoped blocks ---
-        // The issue: "!education!Fx1h let's review"
-        // This line does NOT start with !alias! (well it does, but my top-level regex check failed?)
-        // The regex was: const aliasMatch = line.match(/^!([^!]+)!(\w+)(?:\s+(.+))?$/);
-        // It should have matched.
-        // Wait, "Fx1h" contains digits. \w+ matches [a-zA-Z0-9_]. So Fx1h matches \w+.
-        // Ah, the regex at the top used `(\w+)`.
-        // Let's look at the failed lines: "!education!Fx1h let's review"
-        // code = Fx1h (Matches \w+)
-        // args = "let's review"
-        // So why did it fail in the user output? 
-        // Because "Fx1h" was not in the `['F', ... 'FSD']` list in the alias block
-        // AND `expireMatch` check was inside the `else` block for FSD...
-        // BUT my previous edit fixed exactly that `else` block logic.
-        
-        // However, the USER provided output suggests that aliases were grouped incorrectly.
-        // "Aliases | default" contains "education", "education"...
-        // This means suffix fell through to 'default'.
-        // My previous fix:
-        // else {
-        //    const expireMatch = code.match(/^FX(\d+)([DH]?)$/);
-        //    ...
-        // }
-        // The issue is likely `let suffix = 'default'` initialization inside the alias block logic (not shown here, further up).
-        // Let's verify the Alias Block logic in previous read_file.
         
         if (item) {
             buckets[key].push(item);
@@ -590,26 +668,6 @@ function parseRulesList(rawText) {
     
     return buckets;
 }
-
-function mapCodeToSuffix(code, type) {
-    if (['F', 'STOP', 'S', '>'].includes(code)) return 'default';
-    if (code === 'FR') return type === 'from' ? 'read-stop' : 'read'; // Legacy quirk
-    if (code === 'FRS') return 'read-stop';
-    if (code === 'FRA') return 'read-archive';
-    if (code === 'FRAS') return 'read-archive-stop';
-    if (code === 'FX1') return 'expire';
-    if (code === 'B') return 'reject';
-
-    const expireMatch = code.match(/^FX(\d+)([DH]?)$/);
-    if (expireMatch) {
-         const num = expireMatch[1];
-         const unit = expireMatch[2] === 'H' ? 'hour' : 'day';
-         return `expire:${num}:${unit}`;
-    }
-
-    return 'default';
-}
-
 
 function generateSieveScript(folderName, buckets) {
     const ruleName = folderName.trim() || "Default";
@@ -651,34 +709,7 @@ function generateSieveScript(folderName, buckets) {
             
             const matchBlock = conditions.length > 1 ? `anyof (\n    ${conditions.join(',\n    ')}\n  )` : conditions[0];
             
-            let body = '';
-            if (suffix === 'default') body = `fileinto "${ruleName}";`;
-            else if (suffix === 'read') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";`;
-            else if (suffix === 'read-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
-            else if (suffix === 'read-archive') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
-            else if (suffix === 'read-archive-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
-            else if (suffix === 'expire') body = `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
-            else if (suffix === 'reject') body = `reject "This message was rejected by the mail delivery system.";\n  stop;`;
-            else if (suffix.startsWith('expire:')) {
-                const parts = suffix.split(':');
-                const num = parts[1];
-                const unit = parts[2];
-                const isRead = parts[3] === 'read';
-                
-                let codeBlock = `fileinto "${ruleName}";`;
-                if (isRead) codeBlock += `\n  addflag "\\\\Seen";`;
-                codeBlock += `\n  expire "${unit}" "${num}";\n  stop;`;
-                
-                body = codeBlock;
-            }
-            else if (suffix.startsWith('fsd:')) {
-                const label = suffix.substring(4).trim();
-                body = `fileinto "${label}";\n  stop;`;
-            }
-            else {
-                const label = suffix;
-                body = `fileinto "${label}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
-            }
+            let body = getActionBody(suffix, ruleName);
             
             script += `# Aliases | ${suffix}\n`;
             script += `if allof (\n  ${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  ${body}\n}\n\n`;
@@ -763,9 +794,84 @@ function generateSieveScript(folderName, buckets) {
     return script;
 }
 
+// Deprecated: mapCodeToSuffix (Functionality moved to canonicalSuffix)
+
 function getActionBody(suffix, ruleName) {
+    // Check for new auto format
+    if (suffix.startsWith('auto:')) {
+        const content = suffix.substring(5);
+        // content e.g. "F_R_A_X-1-h_L-label"
+        const parts = content.split('_');
+        
+        let s = '';
+        let fileIntoTarget = false;
+        let markRead = false;
+        let archive = false;
+        let stop = false;
+        let reject = false;
+        let fileIntoLabel = null;
+        let expire = null;
+        
+        parts.forEach(p => {
+            if (p === 'F') fileIntoTarget = true;
+            if (p === 'R') markRead = true;
+            if (p === 'A') archive = true;
+            if (p === 'S') stop = true;
+            if (p === 'B') reject = true;
+            if (p.startsWith('L-')) fileIntoLabel = p.substring(2);
+            if (p.startsWith('X-')) {
+                const [, val, unit] = p.split('-');
+                expire = { val, unit: unit === 'h' ? 'hour' : 'day' };
+            }
+        });
+
+        // Generate Sieve lines
+        if (reject) {
+            // Reject usually stops everything else
+            return `reject "Message Rejected";\n  stop;`;
+        }
+        
+        if (archive) {
+            s += `fileinto "Archive";\n  `;
+        }
+        
+        // File into Target (Rule Name) or Label
+        // If explicit F is set, or if Label is set (implicitly filing into label)
+        // Adjust logic: if Label is present, we file there. 
+        // If F is present and NO label, we file to ruleName.
+        // If F is present AND label is present, we file to label (treating label as override).
+        // If NEITHER F nor Label is present... check defaults? 
+        // (canonicalSuffix default returns 'default' which maps to 'auto:F' usually? 
+        // No, 'default' string is handled in legacy block below? 
+        // Ah, canonicalSuffix returns 'default' literal if empty.
+        // And getActionBody checks `startsWith('auto:')`.
+        // If I return 'default', it falls through to legacy `return fileinto ruleName`.
+        // Valid.)
+        
+        if (fileIntoTarget || fileIntoLabel) {
+             const target = fileIntoLabel || ruleName;
+             s += `fileinto "${target}";\n  `;
+        }
+        
+        if (markRead) {
+            s += `addflag "\\\\Seen";\n  `;
+        }
+        
+        if (expire) {
+            s += `expire "${expire.unit}" "${expire.val}";\n  `;
+        }
+        
+        if (stop) {
+            s += `stop;`;
+        }
+        
+        return s.trim();
+    }
+
+    // Legacy fallback (Shouldn't be hit with new parser)
     if (suffix === 'default') return `fileinto "${ruleName}";`;
     if (suffix === 'read') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";`;
+
     if (suffix === 'read-stop') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
     if (suffix === 'read-archive') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
     if (suffix === 'read-archive-stop') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
@@ -774,9 +880,18 @@ function getActionBody(suffix, ruleName) {
         const parts = suffix.split(':');
         const num = parts[1];
         const unit = parts[2];
-        return `fileinto "${ruleName}";\n  expire "${unit}" "${num}";\n  stop;`;
+        const isRead = parts[3] === 'read';
+        
+        let codeBlock = `fileinto "${ruleName}";`;
+        if (isRead) codeBlock += `\n  addflag "\\\\Seen";`;
+        codeBlock += `\n  expire "${unit}" "${num}";\n  stop;`;
+        return codeBlock;
     }
     if (suffix === 'reject') return `reject "This message was rejected by the mail delivery system.";\n  stop;`;
+    if (suffix && suffix.startsWith('fsd:')) {
+        const label = suffix.substring(4).trim();
+        return `fileinto "${label}";\n  stop;`;
+    }
     return `fileinto "${ruleName}";`;
 }
 

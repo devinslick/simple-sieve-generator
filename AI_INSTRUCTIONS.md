@@ -25,7 +25,7 @@ This project is a Cloudflare Worker application built with Hono and TypeScript. 
 2.  **KV Storage**: The app relies on `SIEVE_DATA` binding. When adding features that store data, ensure the KV logic in `src/index.ts` handles it correctly (keys, values).
 3.  **Frontend**: The frontend is currently a simple string literal in `src/index.ts`. If requests become complex, consider separating it, but for now, keep it simple within the worker response.
 4.  **Deployment**: Changes pushed to `main` are deployed via GitHub Actions. **ENSURE no configuration values are hardcoded.**
-5. **Testing**: Testing will be done entirely in the github CI. Do not rely on local testing with npx/node.
+5.  **Testing**: Testing will be done entirely in the github CI. Do not rely on local testing with npx/node.
 
 ## Future Roadmap (Todo)
 - **Sieve Generation**: Logic to compile the stored lists into valid Sieve scripts.
