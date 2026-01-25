@@ -27,7 +27,7 @@ A combination of characters that determine what happens when the pattern matches
 | `S` | **Stop** | Stops processing further Sieve scripts. |
 | `D` | **Designated** | Moves email to a specific destination defined in the template. |
 | `B` | **Bounce** | Rejects the message with an error. |
-| `x1` | **Expire** | Sets the email to expire in 1 day. |
+| `x[N][u]` | **Expire** | Sets expiration. `x1`=1 day. `x6h`=6 hours. `x30d`=30 days. |
 
 #### Supported Combinations (Buckets)
 
@@ -38,14 +38,14 @@ A combination of characters that determine what happens when the pattern matches
 *   `FRA`: Read + FileInto + Archive + Stop
 *   `FRAS`: Read + FileInto + Archive + Stop
 *   `B`: Reject / Bounce
-*   `Fx1`: Expire + FileInto + Stop
+*   `Fx...`: Expire + FileInto + Stop (e.g. `Fx1`, `Fx12h`)
 
 **From Rules:**
 *   `from:F`: Default (FileInto + Stop) - *Moves email and Stops.*
 *   `from:MRS` (or `from:FR`): Read + FileInto + Stop - *Note: `FR` acts as `FRS` (Stop) for senders.*
 *   `from:FRA`: Read + FileInto + Archive - *Continues processing.*
 *   `from:FRAS`: Read + FileInto + Archive + Stop
-*   `from:Fx1`: Expire + FileInto + Stop
+*   `from:Fx...`: Expire + FileInto + Stop
 *   `from:B`: Reject / Bounce
 
 ### 4. PATTERN (Required)
@@ -86,6 +86,7 @@ The `FRASD` code requires a label argument (e.g., `deal`).
 | `!from:FRAS bad-actor@spam` | **Scoped From**. Read/Archive/Stop ONLY if sent to this mailbox. |
 | `!B malicious-user` | **Scoped Subject**. **Rejects** if subject contains text, ONLY for this mailbox. |
 | `Fx1 Temporary Code` | **Global Subject**. Moves to folder, sets **Expire in 1 day**. |
+| `Fx4h One Time Pass` | **Global Subject**. Moves to folder, sets **Expire in 4 hours**. |
 | `F *Verification*` | **Global Subject**. Uses `:matches` because of wildcards. |
 
 ## Invalid/Strict Mode
