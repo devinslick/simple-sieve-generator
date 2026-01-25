@@ -452,7 +452,7 @@ function parseRulesList(rawText) {
              else if (code === 'FRS') suffix = 'read-stop';
              else if (code === 'FRA') suffix = 'read-archive';
              else if (code === 'FRAS') suffix = 'read-archive-stop';
-             else if (code === 'FX1') suffix = 'expire';
+             else if (code === 'FX1') suffix = 'expire'; // Keep for compat, though regex covers it
              else if (code === 'B') suffix = 'reject';
              else if (code === 'FRASD') {
                  if (!args) continue;
@@ -462,6 +462,27 @@ function parseRulesList(rawText) {
                  if (!args) continue;
                  suffix = 'fsd:' + args.trim();
              }
+             else {
+                 // Check for dynamic Expire (FX...)
+                 const expireMatch = code.match(/^FX(\d+)([DH]?)$/);
+                 if (expireMatch) {
+                     const num = expireMatch[1];
+                     const unit = expireMatch[2] === 'H' ? 'hour' : 'day';
+                     suffix = `expire:${num}:${unit}`;
+                 } else {
+                     // Unknown code for alias, treat as default? Or skip?
+                     // Currently if not matched, it defaults 'default' via suffix init
+                     // But here if it was FSD args check fail, it continues.
+                     // The logic above sets suffix='default' only for specific codes.
+                     // It is safer to re-verify default behaviors.
+                     if (!['F', 'STOP', 'S', '>', 'FR', 'FRS', 'FRA', 'FRAS', 'FX1', 'B', 'FRASD', 'FSD'].includes(code) && !expireMatch) {
+                        // If it's not a known code, we probably shouldn't guess, but original code didn't have a catch-all block.
+                        // Original code: "let suffix = 'default'; if (...) suffix=... else if (...) suffix=..."
+                        // So if fallthrough, it is 'default'. 
+                     }
+                 }
+             }
+
              const key = 'aliases:' + suffix;
              if (!buckets[key]) buckets[key] = [];
              buckets[key].push(...aliases);
@@ -509,6 +530,7 @@ function parseRulesList(rawText) {
         const parts = currentLine.split(/\s+/);
         const possibleCode = parts[0] ? parts[0].toUpperCase() : '';
         const standardCodes = ['F', 'STOP', 'S', '>', 'FR', 'FRS', 'FRA', 'FRAS', 'FX1', 'B'];
+        const isCode = (s) => standardCodes.includes(s) || /^FX(\d+)([DH]?)$/.test(s);
         
         let matchString = currentLine;
         
@@ -519,10 +541,10 @@ function parseRulesList(rawText) {
         
         // Check LAST part first (Common usage usually "Subject matchstring F")
         const lastPart = parts.length > 0 ? parts[parts.length - 1].toUpperCase() : '';
-        if (standardCodes.includes(lastPart)) {
+        if (isCode(lastPart)) {
              bucketSuffix = mapCodeToSuffix(lastPart, type);
              matchString = currentLine.substring(0, currentLine.length - lastPart.length).trim();
-        } else if (standardCodes.includes(possibleCode)) {
+        } else if (isCode(possibleCode)) {
              // Check FIRST part
              bucketSuffix = mapCodeToSuffix(possibleCode, type);
              matchString = currentLine.substring(possibleCode.length).trim();
@@ -548,6 +570,14 @@ function mapCodeToSuffix(code, type) {
     if (code === 'FRAS') return 'read-archive-stop';
     if (code === 'FX1') return 'expire';
     if (code === 'B') return 'reject';
+
+    const expireMatch = code.match(/^FX(\d+)([DH]?)$/);
+    if (expireMatch) {
+         const num = expireMatch[1];
+         const unit = expireMatch[2] === 'H' ? 'hour' : 'day';
+         return `expire:${num}:${unit}`;
+    }
+
     return 'default';
 }
 
@@ -600,6 +630,12 @@ function generateSieveScript(folderName, buckets) {
             else if (suffix === 'read-archive-stop') body = `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
             else if (suffix === 'expire') body = `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
             else if (suffix === 'reject') body = `reject "This message was rejected by the mail delivery system.";\n  stop;`;
+            else if (suffix.startsWith('expire:')) {
+                const parts = suffix.split(':');
+                const num = parts[1];
+                const unit = parts[2];
+                body = `fileinto "${ruleName}";\n  expire "${unit}" "${num}";\n  stop;`;
+            }
             else if (suffix.startsWith('fsd:')) {
                 const label = suffix.substring(4).trim();
                 body = `fileinto "${label}";\n  stop;`;
@@ -699,6 +735,12 @@ function getActionBody(suffix, ruleName) {
     if (suffix === 'read-archive') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
     if (suffix === 'read-archive-stop') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
     if (suffix === 'expire') return `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
+    if (suffix && suffix.startsWith('expire:')) {
+        const parts = suffix.split(':');
+        const num = parts[1];
+        const unit = parts[2];
+        return `fileinto "${ruleName}";\n  expire "${unit}" "${num}";\n  stop;`;
+    }
     if (suffix === 'reject') return `reject "This message was rejected by the mail delivery system.";\n  stop;`;
     return `fileinto "${ruleName}";`;
 }

@@ -2,6 +2,9 @@
 
 A Cloudflare Worker-based web app to manage Sieve email filtering lists and generate rules.
 
+**Live Demo**: [simple-sieve-generator-demo.devinslick.com](https://simple-sieve-generator-demo.devinslick.com/)  
+*(Note: This demo is running in Demo Mode, so saving and deleting lists is disabled.)*
+
 ## Features
 - **Cloudflare Workers**: Serverless compute.
 - **Hono**: Fast, lightweight web framework.
