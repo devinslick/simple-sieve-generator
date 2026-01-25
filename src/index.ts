@@ -494,8 +494,11 @@ function parseRulesList(rawText) {
         
         const key = `${currentScope}-${type}-${bucketSuffix}`;
         if (!buckets[key]) buckets[key] = [];
-        const items = matchString.split(',').map(s => s.trim()).filter(s => s !== '');
-        buckets[key].push(...items);
+        // Treat the rest of the line as a single pattern (preserve commas)
+        const item = matchString.trim();
+        if (item) {
+            buckets[key].push(item);
+        }
     }
     
     return buckets;
