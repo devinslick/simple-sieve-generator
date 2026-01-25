@@ -151,18 +151,16 @@ app.get('/', (c) => {
             body { padding: 0.75rem; }
           }
         </style>
-        <scrconst IS_DEMO = ${isDemo};
-
-            ipt>
+        <script>
             // --- UI LOGIC ---
+            const IS_DEMO = ${isDemo};
+
             function initTheme() {
                 const stored = localStorage.getItem('theme');
                 if (stored) {
                     document.documentElement.setAttribute('data-theme', stored);
                 } else {
                     // Default is Dark (no attribute needed as per :root)
-                    // If we want to be explicit or respect system:
-                    // document.documentElement.setAttribute('data-theme', 'dark');
                 }
                 updateThemeIcon();
             }
@@ -177,6 +175,10 @@ app.get('/', (c) => {
 
             function updateThemeIcon() {
                 const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+                document.getElementById('themeIcon').textContent = isLight ? '🌙' : '☀️';
+            }
+
+            async function loadListNames() {
                 if (IS_DEMO) {
                     const selector = document.getElementById('savedLists');
                     selector.innerHTML = '<option value="">-- Demo Mode (Saving Disabled) --</option>';
@@ -200,20 +202,13 @@ app.get('/', (c) => {
                     alert("This feature is disabled in Demo Mode.");
                     return;
                 }
-                } catch(e) { console.error('Failed to load lists', e); }
-            }
-
-            async function saveCurrentList() {
+                
                 // Use Folder Name field for list name
                 const name = document.getElementById('folderName').value.trim();
                 
                 if(!name) {
                     alert("Please enter a Folder Name to save this list.");
                     return;
-                if (IS_DEMO) {
-                    alert("This feature is disabled in Demo Mode.");
-                    return;
-                }
                 }
                 
                 const content = document.getElementById('rulesInput').value;
@@ -227,6 +222,11 @@ app.get('/', (c) => {
             }
             
             async function deleteCurrentList() {
+                if (IS_DEMO) {
+                    alert("This feature is disabled in Demo Mode.");
+                    return;
+                }
+
                 const name = document.getElementById('savedLists').value;
                 if(!name) {
                     alert("No list selected to delete.");
@@ -289,10 +289,7 @@ app.get('/', (c) => {
                     const originalText = btn.innerText;
                     btn.innerText = "Copied!";
                     setTimeout(() => btn.innerText = originalText, 2000);
-                
-                Simple Sieve Generator
-                ${isDemo ? '<span style="font-size: 0.5em; background: var(--warning); color: #000; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 10px;">DEMO MODE</span>' : ''}
-            
+                } catch (err) {
                     console.error('Failed to copy: ', err);
                     alert("Failed to copy to clipboard");
                 }
@@ -307,7 +304,10 @@ app.get('/', (c) => {
       </head>
       <body>
         <header>
-            <h1>Simple Sieve Generator</h1>
+            <h1>
+                Simple Sieve Generator
+                ${isDemo ? '<span style="font-size: 0.5em; background: var(--warning); color: #000; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 10px;">DEMO MODE</span>' : ''}
+            </h1>
             <button class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
                 <span id="themeIcon">☀️</span>
             </button>
