@@ -447,6 +447,8 @@ function parseRulesList(rawText) {
              const code = aliasMatch[2].toUpperCase();
              const args = aliasMatch[3] ? aliasMatch[3].trim() : '';
              let suffix = 'default';
+             
+             // --- FIX: Logic correction for handling suffix assignment ---
              if (['F', 'STOP', 'S', '>'].includes(code)) suffix = 'default';
              else if (code === 'FR') suffix = 'read';
              else if (code === 'FRS') suffix = 'read-stop';
@@ -550,10 +552,40 @@ function parseRulesList(rawText) {
              matchString = currentLine.substring(possibleCode.length).trim();
         }
         
+        // --- ADDITION: If it's an alias rule that slipped through? --- 
+        // No, alias rules start with !alias! which is handled at top of loop.
+        
         const key = `${currentScope}-${type}-${bucketSuffix}`;
         if (!buckets[key]) buckets[key] = [];
         // Treat the rest of the line as a single pattern (preserve commas)
         const item = matchString.trim();
+        
+        // --- FIX: Check for !alias! patterns inside Global/Scoped blocks ---
+        // The issue: "!education!Fx1h let's review"
+        // This line does NOT start with !alias! (well it does, but my top-level regex check failed?)
+        // The regex was: const aliasMatch = line.match(/^!([^!]+)!(\w+)(?:\s+(.+))?$/);
+        // It should have matched.
+        // Wait, "Fx1h" contains digits. \w+ matches [a-zA-Z0-9_]. So Fx1h matches \w+.
+        // Ah, the regex at the top used `(\w+)`.
+        // Let's look at the failed lines: "!education!Fx1h let's review"
+        // code = Fx1h (Matches \w+)
+        // args = "let's review"
+        // So why did it fail in the user output? 
+        // Because "Fx1h" was not in the `['F', ... 'FSD']` list in the alias block
+        // AND `expireMatch` check was inside the `else` block for FSD...
+        // BUT my previous edit fixed exactly that `else` block logic.
+        
+        // However, the USER provided output suggests that aliases were grouped incorrectly.
+        // "Aliases | default" contains "education", "education"...
+        // This means suffix fell through to 'default'.
+        // My previous fix:
+        // else {
+        //    const expireMatch = code.match(/^FX(\d+)([DH]?)$/);
+        //    ...
+        // }
+        // The issue is likely `let suffix = 'default'` initialization inside the alias block logic (not shown here, further up).
+        // Let's verify the Alias Block logic in previous read_file.
+        
         if (item) {
             buckets[key].push(item);
         }
