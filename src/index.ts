@@ -598,14 +598,17 @@ function parseRulesList(rawText) {
              
              // If we have remaining args, treat them as a Subject Match (Filter)
              // But only if they aren't empty
-             let keySuffix = suffix;
              if (matchArgs && matchArgs.length > 0) {
-                 keySuffix += `###FILTER:${matchArgs}`;
+                 // Group by (Suffix + Alias-Set) to allow combining multiple filters for same alias
+                 const aliasKey = aliases.sort().join(',');
+                 const key = `aliases-filtered:${suffix}###${aliasKey}`;
+                 if (!buckets[key]) buckets[key] = [];
+                 buckets[key].push(matchArgs);
+             } else {
+                 const key = 'aliases:' + suffix;
+                 if (!buckets[key]) buckets[key] = [];
+                 buckets[key].push(...aliases);
              }
-             
-             const key = 'aliases:' + keySuffix;
-             if (!buckets[key]) buckets[key] = [];
-             buckets[key].push(...aliases);
              continue; 
         }
 
@@ -696,20 +699,44 @@ function generateSieveScript(folderName, buckets) {
     };
 
     // --- ALIASES ---
+    // 1. Filtered Aliases (Specific rules first)
+    const aliasFilteredKeys = Object.keys(buckets).filter(k => k.startsWith('aliases-filtered:'));
+    
+    if (aliasFilteredKeys.length > 0) {
+        script += `# --- ALIAS RULES (FILTERED) ---\n\n`;
+        for (const key of aliasFilteredKeys) {
+            const part = key.substring('aliases-filtered:'.length);
+            const [suffix, aliasStr] = part.split('###');
+            const aliasList = aliasStr.split(',').map(a => `"${a}"`).join(', ');
+            
+            const filters = buckets[key];
+            const { contains: subjectContains, matches: subjectMatches } = splitMatches(filters);
+            
+            const subjectConditions = [];
+            if (subjectContains.length) subjectConditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${subjectContains.join(', ')}]`);
+            if (subjectMatches.length) subjectConditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${subjectMatches.join(', ')}]`);
+            
+            if (subjectConditions.length === 0) continue; 
+            const subjectBlock = subjectConditions.length > 1 ? `anyof (\n    ${subjectConditions.join(',\n    ')}\n  )` : subjectConditions[0];
+
+            let body = getActionBody(suffix, ruleName);
+            
+            script += `# Aliases (Filtered) | ${suffix} | ${aliasStr}\n`;
+            script += `if allof (\n`;
+            script += `  header :comparator "i;unicode-casemap" :contains "X-Original-To" [${aliasList}],\n`;
+            script += `  header :contains "Delivered-To" ["@"],\n`;
+            script += `  ${subjectBlock}\n`;
+            script += `) {\n  ${body}\n}\n\n`;
+        }
+    }
+
+    // 2. Generic Aliases
     const aliasKeys = Object.keys(buckets).filter(k => k.startsWith('aliases:'));
     
     if (aliasKeys.length > 0) {
-        script += `# --- ALIAS RULES ---\n\n`;
+        script += `# --- ALIAS RULES (GENERIC) ---\n\n`;
         for (const key of aliasKeys) {
-            let suffix = key.substring('aliases:'.length);
-            let filterString = null;
-            
-            if (suffix.includes('###FILTER:')) {
-                const parts = suffix.split('###FILTER:');
-                suffix = parts[0];
-                filterString = parts[1];
-            }
-
+            const suffix = key.substring('aliases:'.length);
             const items = buckets[key];
             if (!items.length) continue;
             
@@ -724,26 +751,8 @@ function generateSieveScript(folderName, buckets) {
             
             let body = getActionBody(suffix, ruleName);
             
-            script += `# Aliases | ${suffix}${filterString ? ' | Filter: ' + filterString : ''}\n`;
-            
-            let blockConditions = [
-                matchBlock,
-                `header :contains "Delivered-To" ["@"]`
-            ];
-            
-            if (filterString) {
-                // If filterString contains wildcard, use :matches?
-                // Legacy system just passed 'args' through.
-                // Assuming contains for now unless it looks like regex/wildcard?
-                // splitMatches logic used '*' or '?' check.
-                if (filterString.includes('*') || filterString.includes('?')) {
-                     blockConditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" "${filterString}"`);
-                } else {
-                     blockConditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" "${filterString}"`);
-                }
-            }
-            
-            script += `if allof (\n  ${blockConditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
+            script += `# Aliases | ${suffix}\n`;
+            script += `if allof (\n  ${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  ${body}\n}\n\n`;
         }
     }
     
