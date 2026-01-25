@@ -32,20 +32,22 @@ A combination of characters that determine what happens when the pattern matches
 #### Supported Combinations (Buckets)
 
 **Subject Rules:**
-*   `F` or `S`: Default (FileInto + Stop)
-*   `FR`: Read + FileInto + Stop
+*   `F`: FileInto (Moves to folder)
+*   `S`: FileInto + Stop
+*   `FR`: Read + FileInto
 *   `FRS`: Read + FileInto + Stop
-*   `FRA`: Read + FileInto + Archive + Stop
+*   `FRA`: Read + FileInto + Archive
 *   `FRAS`: Read + FileInto + Archive + Stop
 *   `B`: Reject / Bounce
-*   `Fx...`: Expire + FileInto + Stop (e.g. `Fx1`, `Fx12h`)
+*   `Fx...`: Expire + FileInto (e.g. `Fx1`, `Fx12h`)
 
 **From Rules:**
-*   `from:F`: Default (FileInto + Stop) - *Moves email and Stops.*
-*   `from:MRS` (or `from:FR`): Read + FileInto + Stop - *Note: `FR` acts as `FRS` (Stop) for senders.*
+*   `from:F`: FileInto - *Moves email.*
+*   `from:FR`: Read + FileInto - *Moves email and marks as Read.*
+*   `from:FRS`: Read + FileInto + Stop - *Moves, marks Read, and Stops.*
 *   `from:FRA`: Read + FileInto + Archive - *Continues processing.*
 *   `from:FRAS`: Read + FileInto + Archive + Stop
-*   `from:Fx...`: Expire + FileInto + Stop
+*   `from:Fx...`: Expire + FileInto
 *   `from:B`: Reject / Bounce
 
 ### 4. PATTERN (Required)

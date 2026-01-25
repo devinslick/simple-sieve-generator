@@ -781,8 +781,8 @@ function generateSieveScript(folderName, buckets) {
             if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From"] [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From"] [${matches.join(', ')}]`);
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From", "X-Simplelogin-Original-From"] [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From", "X-Simplelogin-Original-From"] [${matches.join(', ')}]`);
             if (conditions.length === 0) continue;
             let body = getActionBody(suffix, ruleName);
             script += `# Global | From | ${suffix}\n`;
@@ -820,8 +820,8 @@ function generateSieveScript(folderName, buckets) {
              if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From"] [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From"] [${matches.join(', ')}]`);
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From", "X-Simplelogin-Original-From"] [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From", "X-Simplelogin-Original-From"] [${matches.join(', ')}]`);
             let body = getActionBody(suffix, ruleName);
             body = body.split('\n').map(l => '  ' + l).join('\n');
             const conditionStr = conditions.join(',\n      ');
