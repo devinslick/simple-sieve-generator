@@ -2,11 +2,13 @@
 import { Hono } from 'hono';
 type Bindings = {
   SIEVE_DATA: KVNamespace
+  DEMO_MODE?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/', (c) => {
+  const isDemo = c.env.DEMO_MODE === 'true';
   return c.html(`
     <!DOCTYPE html>
     <html>
@@ -18,6 +20,8 @@ app.get('/', (c) => {
             /* Default: Dark Mode */
             --primary: #3a8fd9;
             --danger: #e74c3c;
+            /* Demo Mode Warning Color */
+            --warning: #f39c12; 
             --bg-body: #121212;
             --bg-card: #1e1e1e;
             --bg-input: #2d2d2d;
@@ -147,7 +151,9 @@ app.get('/', (c) => {
             body { padding: 0.75rem; }
           }
         </style>
-        <script>
+        <scrconst IS_DEMO = ${isDemo};
+
+            ipt>
             // --- UI LOGIC ---
             function initTheme() {
                 const stored = localStorage.getItem('theme');
@@ -171,10 +177,13 @@ app.get('/', (c) => {
 
             function updateThemeIcon() {
                 const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-                document.getElementById('themeIcon').textContent = isLight ? '🌙' : '☀️';
-            }
+                if (IS_DEMO) {
+                    const selector = document.getElementById('savedLists');
+                    selector.innerHTML = '<option value="">-- Demo Mode (Saving Disabled) --</option>';
+                    selector.disabled = true;
+                    return;
+                }
 
-            async function loadListNames() {
                 try {
                     const res = await fetch('/api/lists');
                     if(res.ok) {
@@ -187,12 +196,24 @@ app.get('/', (c) => {
             }
 
             async function saveCurrentList() {
+                if (IS_DEMO) {
+                    alert("This feature is disabled in Demo Mode.");
+                    return;
+                }
+                } catch(e) { console.error('Failed to load lists', e); }
+            }
+
+            async function saveCurrentList() {
                 // Use Folder Name field for list name
                 const name = document.getElementById('folderName').value.trim();
                 
                 if(!name) {
                     alert("Please enter a Folder Name to save this list.");
                     return;
+                if (IS_DEMO) {
+                    alert("This feature is disabled in Demo Mode.");
+                    return;
+                }
                 }
                 
                 const content = document.getElementById('rulesInput').value;
@@ -268,7 +289,10 @@ app.get('/', (c) => {
                     const originalText = btn.innerText;
                     btn.innerText = "Copied!";
                     setTimeout(() => btn.innerText = originalText, 2000);
-                } catch (err) {
+                
+                Simple Sieve Generator
+                ${isDemo ? '<span style="font-size: 0.5em; background: var(--warning); color: #000; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 10px;">DEMO MODE</span>' : ''}
+            
                     console.error('Failed to copy: ', err);
                     alert("Failed to copy to clipboard");
                 }
@@ -307,28 +331,40 @@ app.get('/', (c) => {
           <label for="rulesInput">Rules List: <a href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a></label>
           <textarea id="rulesInput" placeholder="!alias1,alias2!FRASD deal&#10;!scope&#10;Subject Rule F&#10;from:sender@example.com FR"></textarea>
         </div>
-        
-        <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
-        
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <label style="margin-bottom: 0;">Generated Output:</label>
-            <button id="copyBtn" onclick="copyToClipboard()" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">Copy to Clipboard</button>
-        </div>
-        <textarea id="genOutput" placeholder="Generated script will appear here..." readonly style="background: var(--bg-input); color: var(--text);"></textarea>
-        
-        <div id="genLogs" class="log-box">Ready.</div>
-      </body>
-    </html>
-  `);
-});
-
-// --- API ROUTES FOR SAVE/LOAD ---
-
-app.get('/api/lists', async (c) => {
+    if (c.env.DEMO_MODE === 'true') {
+        return c.json([]);
+    }
     try {
         const list = await c.env.SIEVE_DATA.list({ prefix: 'list:' });
         return c.json(list.keys.map(k => k.name.substring(5))); // remove 'list:' prefix
     } catch(e) { return c.json([]); }
+});
+
+app.get('/api/lists/:name', async (c) => {
+    if (c.env.DEMO_MODE === 'true') {
+        return c.notFound();
+    }
+    const name = c.req.param('name');
+    const val = await c.env.SIEVE_DATA.get('list:' + name);
+    if(val === null) return c.notFound();
+    return c.text(val);
+});
+
+app.put('/api/lists/:name', async (c) => {
+    if (c.env.DEMO_MODE === 'true') {
+        return c.json({ error: "Demo Mode: Save disabled" }, 403);
+    }
+    const name = c.req.param('name');
+    const content = await c.req.text();
+    await c.env.SIEVE_DATA.put('list:' + name, content);
+    return c.json({ success: true });
+});
+
+
+app.delete('/api/lists/:name', async (c) => {
+    if (c.env.DEMO_MODE === 'true') {
+        return c.json({ error: "Demo Mode: Delete disabled" }, 403);
+    }
 });
 
 app.get('/api/lists/:name', async (c) => {

@@ -64,6 +64,21 @@ Go to your GitHub Repository **Settings > Secrets and variables > Actions** and 
 
 Once these are set, pushing to the `main` branch will automatically inject these IDs into the configuration and deploy your worker.
 
+### Demo Mode deployment
+
+You can optionally deploy a secondary copy of the application in "Demo Mode", which disables all KV connections and save/load features. This is useful for public demonstrations.
+
+To enable this:
+1. Go to your GitHub Repository **Settings > Secrets and variables > Actions**.
+2. Click on the **Variables** tab (next to Secrets).
+3. Create a **New repository variable**.
+   - Name: `ENABLE_DEMO_DEPLOYMENT`
+   - Value: `true`
+4. The next time the Deploy workflow runs (on push to main), it will also deploy the demo site to a worker named `simple-sieve-generator-demo`.
+
+**Configuration:**
+The `wrangler.toml` includes a `[env.demo]` section which sets the `DEMO_MODE` environment variable to `"true"`. The application detects this variable to disable backend features and show a "DEMO MODE" badge in the UI.
+
 ### Usage
 1. **Access UI**: Visit your deployed URL.
 2. **Manage Lists**: Create, Save, and Load rule lists.

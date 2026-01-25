@@ -15,3 +15,8 @@ preview_id = "SIEVE_DATA_PREVIEW_ID"
 # Deployment
 [triggers]
 crons = []
+
+# Demo Environment
+[env.demo]
+name = "simple-sieve-generator-demo"
+vars = { DEMO_MODE = "true" }
