@@ -508,8 +508,12 @@ function canonicalSuffix(dsl) {
     
     const parts = [];
     
+    // Auto-set F (File) if not Reject/Bounce.
+    // This handles "Ax2h" vs "AFx2h" deduplication.
+    const hasF = dsl.flags.F || !dsl.flags.B;
+
     // Flags
-    if (dsl.flags.F) parts.push('F');
+    if (hasF) parts.push('F');
     if (dsl.flags.R) parts.push('R');
     if (dsl.flags.A) parts.push('A');
     if (dsl.flags.S) parts.push('S');
@@ -554,51 +558,52 @@ function parseRulesList(rawText) {
              const rest = aliasMatch[2].trim();
              
              // Now parse 'rest' for code + args.
-             // e.g. "AFx2h remainder"
+             // e.g. "AFx2h remainder" or "remainder AFx2h"
              // or "Fx1"
              const parts = rest.split(/\s+/);
-             const possibleCode = parts[0];
-             const dsl = parseDSL(possibleCode);
+             const first = parts[0];
+             const last = parts.length > 0 ? parts[parts.length - 1] : '';
              
              let suffix = 'default';
              let matchArgs = rest;
              
-             if (dsl && dsl.hasFlags) {
-                 suffix = canonicalSuffix(dsl);
-                 // If the code was the first part, remove it from args
-                 matchArgs = rest.substring(possibleCode.length).trim();
+             const dslFirst = parseDSL(first);
+             const dslLast = parseDSL(last);
+             let dsl = null;
+             
+             // Prefer LAST if valid (standard "Pattern CODE" style, though legacy alias was "CODE Pattern")
+             // Actually legacy alias was "CODE Pattern". So First is preferred for backward compat?
+             // But Global logic prefers Last.
+             // If "AFx2h remainder", First is code.
+             // If "remainder AFx2h", Last is code.
+             
+             if (dslFirst && dslFirst.hasFlags) {
+                 dsl = dslFirst;
+                 matchArgs = rest.substring(first.length).trim();
                  
                  // Support 'fsd' legacy separate arg for label? "FRASD label"
-                 // If 'D' flag is present but no inline label, treat next word as label?
-                 // User asked for "!test!" inline.
-                 // If they type "FRASD label", 'D' is set.
-                 // My new parser supports explicit !label!.
-                 // If I want to support legacy "FRASD label":
                  if (dsl.flags.D && !dsl.label && parts[1]) {
-                     // Steal next part as label
                      const labelArg = parts[1];
-                     // Re-generate suffix with label
                      dsl.label = labelArg;
-                     suffix = canonicalSuffix(dsl); // Now includes L-label
-                     matchArgs = rest.substring(possibleCode.length + 1 + labelArg.length).trim();
+                     matchArgs = rest.substring(first.length + 1 + labelArg.length).trim();
                  }
-             } else {
-                 // No valid code found?
-                 // Existing logic: defaulted to 'default'.
-                 // If standard alias "!alias!target", target is args, code fallsback to default?
-                 // Wait, standard alias is "!alias!CODE args".
-                 // If I type "!alias!user@email.com", is "user@email.com" a code? No.
-                 // So "user@email.com" is matched as args?
-                 // And suffix is 'default'?
-                 // Yes.
+             } else if (dslLast && dslLast.hasFlags) {
+                 dsl = dslLast;
+                 matchArgs = rest.substring(0, rest.length - last.length).trim();
              }
              
-             // One edge case: "FSD label".
-             // parseDSL("FSD") -> Flags F, S, D.
-             // D present, no inline label.
-             // Check parts[1].
+             if (dsl) {
+                 suffix = canonicalSuffix(dsl);
+             } 
              
-             const key = 'aliases:' + suffix;
+             // If we have remaining args, treat them as a Subject Match (Filter)
+             // But only if they aren't empty
+             let keySuffix = suffix;
+             if (matchArgs && matchArgs.length > 0) {
+                 keySuffix += `###FILTER:${matchArgs}`;
+             }
+             
+             const key = 'aliases:' + keySuffix;
              if (!buckets[key]) buckets[key] = [];
              buckets[key].push(...aliases);
              continue; 
@@ -696,7 +701,15 @@ function generateSieveScript(folderName, buckets) {
     if (aliasKeys.length > 0) {
         script += `# --- ALIAS RULES ---\n\n`;
         for (const key of aliasKeys) {
-            const suffix = key.substring('aliases:'.length);
+            let suffix = key.substring('aliases:'.length);
+            let filterString = null;
+            
+            if (suffix.includes('###FILTER:')) {
+                const parts = suffix.split('###FILTER:');
+                suffix = parts[0];
+                filterString = parts[1];
+            }
+
             const items = buckets[key];
             if (!items.length) continue;
             
@@ -711,8 +724,26 @@ function generateSieveScript(folderName, buckets) {
             
             let body = getActionBody(suffix, ruleName);
             
-            script += `# Aliases | ${suffix}\n`;
-            script += `if allof (\n  ${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  ${body}\n}\n\n`;
+            script += `# Aliases | ${suffix}${filterString ? ' | Filter: ' + filterString : ''}\n`;
+            
+            let blockConditions = [
+                matchBlock,
+                `header :contains "Delivered-To" ["@"]`
+            ];
+            
+            if (filterString) {
+                // If filterString contains wildcard, use :matches?
+                // Legacy system just passed 'args' through.
+                // Assuming contains for now unless it looks like regex/wildcard?
+                // splitMatches logic used '*' or '?' check.
+                if (filterString.includes('*') || filterString.includes('?')) {
+                     blockConditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" "${filterString}"`);
+                } else {
+                     blockConditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" "${filterString}"`);
+                }
+            }
+            
+            script += `if allof (\n  ${blockConditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
         }
     }
     
