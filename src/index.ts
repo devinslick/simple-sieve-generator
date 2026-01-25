@@ -331,6 +331,24 @@ app.get('/', (c) => {
           <label for="rulesInput">Rules List: <a href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a></label>
           <textarea id="rulesInput" placeholder="!alias1,alias2!FRASD deal&#10;!scope&#10;Subject Rule F&#10;from:sender@example.com FR"></textarea>
         </div>
+        
+        <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <label style="margin-bottom: 0;">Generated Output:</label>
+            <button id="copyBtn" onclick="copyToClipboard()" style="padding: 0.4rem 0.8rem; font-size: 0.9rem;">Copy to Clipboard</button>
+        </div>
+        <textarea id="genOutput" placeholder="Generated script will appear here..." readonly style="background: var(--bg-input); color: var(--text);"></textarea>
+        
+        <div id="genLogs" class="log-box">Ready.</div>
+      </body>
+    </html>
+  `);
+});
+
+// --- API ROUTES FOR SAVE/LOAD ---
+
+app.get('/api/lists', async (c) => {
     if (c.env.DEMO_MODE === 'true') {
         return c.json([]);
     }
@@ -365,24 +383,6 @@ app.delete('/api/lists/:name', async (c) => {
     if (c.env.DEMO_MODE === 'true') {
         return c.json({ error: "Demo Mode: Delete disabled" }, 403);
     }
-});
-
-app.get('/api/lists/:name', async (c) => {
-    const name = c.req.param('name');
-    const val = await c.env.SIEVE_DATA.get('list:' + name);
-    if(val === null) return c.notFound();
-    return c.text(val);
-});
-
-app.put('/api/lists/:name', async (c) => {
-    const name = c.req.param('name');
-    const content = await c.req.text();
-    await c.env.SIEVE_DATA.put('list:' + name, content);
-    return c.json({ success: true });
-});
-
-
-app.delete('/api/lists/:name', async (c) => {
     const name = c.req.param('name');
     await c.env.SIEVE_DATA.delete('list:' + name);
     return c.json({ success: true });
