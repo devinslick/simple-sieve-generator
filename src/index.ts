@@ -465,22 +465,19 @@ function parseRulesList(rawText) {
                  suffix = 'fsd:' + args.trim();
              }
              else {
-                 // Check for dynamic Expire (FX...)
-                 const expireMatch = code.match(/^FX(\d+)([DH]?)$/);
+                 // Check for dynamic Expire (FX...) or Read-Expire (FRX...)
+                 const expireMatch = code.match(/^(F)(R?)(X)(\d+)([DH]?)$/);
                  if (expireMatch) {
-                     const num = expireMatch[1];
-                     const unit = expireMatch[2] === 'H' ? 'hour' : 'day';
-                     suffix = `expire:${num}:${unit}`;
+                     // Groups: 1=F, 2=R(opt), 3=X, 4=Digits, 5=Unit(opt)
+                     const isRead = expireMatch[2] === 'R';
+                     const num = expireMatch[4];
+                     const unit = expireMatch[5] === 'H' ? 'hour' : 'day';
+                     suffix = `expire:${num}:${unit}${isRead ? ':read' : ''}`;
                  } else {
-                     // Unknown code for alias, treat as default? Or skip?
-                     // Currently if not matched, it defaults 'default' via suffix init
-                     // But here if it was FSD args check fail, it continues.
-                     // The logic above sets suffix='default' only for specific codes.
-                     // It is safer to re-verify default behaviors.
-                     if (!['F', 'STOP', 'S', '>', 'FR', 'FRS', 'FRA', 'FRAS', 'FX1', 'B', 'FRASD', 'FSD'].includes(code) && !expireMatch) {
-                        // If it's not a known code, we probably shouldn't guess, but original code didn't have a catch-all block.
-                        // Original code: "let suffix = 'default'; if (...) suffix=... else if (...) suffix=..."
-                        // So if fallthrough, it is 'default'. 
+                     // ... existing fallthrough logic
+                     const legacyFx1 = code === 'FX1';
+                     if (legacyFx1) {
+                        suffix = 'expire'; // Legacy
                      }
                  }
              }
@@ -666,7 +663,13 @@ function generateSieveScript(folderName, buckets) {
                 const parts = suffix.split(':');
                 const num = parts[1];
                 const unit = parts[2];
-                body = `fileinto "${ruleName}";\n  expire "${unit}" "${num}";\n  stop;`;
+                const isRead = parts[3] === 'read';
+                
+                let codeBlock = `fileinto "${ruleName}";`;
+                if (isRead) codeBlock += `\n  addflag "\\\\Seen";`;
+                codeBlock += `\n  expire "${unit}" "${num}";\n  stop;`;
+                
+                body = codeBlock;
             }
             else if (suffix.startsWith('fsd:')) {
                 const label = suffix.substring(4).trim();
