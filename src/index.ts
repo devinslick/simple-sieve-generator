@@ -436,7 +436,7 @@ app.get('/', (c) => {
                 }
                 const expireMatch = temp.match(/x(\d+)([dh]?)/i);
                 if (expireMatch) {
-                    expire = `x\${expireMatch[1]}\${expireMatch[2]}`;
+                    expire = \`x\${expireMatch[1]}\${expireMatch[2]}\`;
                     temp = temp.replace(expireMatch[0], '');
                 }
                 
