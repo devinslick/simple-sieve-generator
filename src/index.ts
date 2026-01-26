@@ -224,7 +224,7 @@ app.get('/', (c) => {
                         const savedVal = selector.value;
                         
                         selector.innerHTML = '<option value="">-- Load Saved List --</option>' + 
-                            ALL_LISTS.map(l => \`<option value="\${l}">\${l}</option>\`).join('');
+                            ALL_LISTS.map(function(l) { return '<option value="' + l + '">' + l + '</option>'; }).join('');
                             
                         if (savedVal && ALL_LISTS.includes(savedVal)) {
                             selector.value = savedVal;
@@ -278,7 +278,7 @@ app.get('/', (c) => {
                 // Optimistic UI Update
                 const selector = document.getElementById('savedLists');
                 selector.innerHTML = '<option value="">-- Load Saved List --</option>' + 
-                            ALL_LISTS.map(l => \`<option value="\${l}">\${l}</option>\`).join('');
+                            ALL_LISTS.map(function(l) { return '<option value="' + l + '">' + l + '</option>'; }).join('');
                 selector.value = name;
                 
                 // Sync to Server
@@ -701,7 +701,8 @@ app.get('/', (c) => {
                  
                  return row;
             }
-
+        </script>
+      </head>
       <body>
         <header>
             <h1>
