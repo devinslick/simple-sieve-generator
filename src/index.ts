@@ -154,6 +154,7 @@ app.get('/', (c) => {
         <script>
             // --- UI LOGIC ---
             const IS_DEMO = ${isDemo};
+            let ALL_LISTS = [];
 
             function initTheme() {
                 const stored = localStorage.getItem('theme');
@@ -189,10 +190,18 @@ app.get('/', (c) => {
                 try {
                     const res = await fetch('/api/lists');
                     if(res.ok) {
-                        const lists = await res.json();
+                        ALL_LISTS = await res.json();
                         const selector = document.getElementById('savedLists');
+                        
+                        // Preserve selected if possible
+                        const savedVal = selector.value;
+                        
                         selector.innerHTML = '<option value="">-- Load Saved List --</option>' + 
-                            lists.map(l => \`<option value="\${l}">\${l}</option>\`).join('');
+                            ALL_LISTS.map(l => \`<option value="\${l}">\${l}</option>\`).join('');
+                            
+                        if (savedVal && ALL_LISTS.includes(savedVal)) {
+                            selector.value = savedVal;
+                        }
                     }
                 } catch(e) { console.error('Failed to load lists', e); }
             }
@@ -221,6 +230,44 @@ app.get('/', (c) => {
                 } catch(e) { alert('Error saving: ' + e.message); }
             }
             
+            async function moveList(direction) {
+                if (IS_DEMO) return;
+                const name = document.getElementById('savedLists').value;
+                if (!name) return;
+                
+                const idx = ALL_LISTS.indexOf(name);
+                if (idx < 0) return;
+                
+                if (direction === -1 && idx > 0) {
+                     // Move Up
+                     [ALL_LISTS[idx], ALL_LISTS[idx-1]] = [ALL_LISTS[idx-1], ALL_LISTS[idx]];
+                } else if (direction === 1 && idx < ALL_LISTS.length - 1) {
+                     // Move Down
+                     [ALL_LISTS[idx], ALL_LISTS[idx+1]] = [ALL_LISTS[idx+1], ALL_LISTS[idx]];
+                } else {
+                    return; // No move possible
+                }
+                
+                // Optimistic UI Update
+                const selector = document.getElementById('savedLists');
+                selector.innerHTML = '<option value="">-- Load Saved List --</option>' + 
+                            ALL_LISTS.map(l => \`<option value="\${l}">\${l}</option>\`).join('');
+                selector.value = name;
+                
+                // Sync to Server
+                try {
+                    await fetch('/api/lists/order', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(ALL_LISTS)
+                    });
+                } catch(e) {
+                    console.error('Failed to save order', e);
+                    alert('Failed to save list order');
+                    loadListNames(); // revert
+                }
+            }
+
             async function deleteCurrentList() {
                 if (IS_DEMO) {
                     alert("This feature is disabled in Demo Mode.");
@@ -316,6 +363,8 @@ app.get('/', (c) => {
         <div class="card">
              <label for="savedLists">Load/Manage Saved List:</label>
              <div class="controls-row">
+                 <button onclick="moveList(-1)" title="Move Up" style="width: auto; padding-left: 0.5rem; padding-right: 0.5rem;">⬆️</button>
+                 <button onclick="moveList(1)" title="Move Down" style="width: auto; padding-left: 0.5rem; padding-right: 0.5rem;">⬇️</button>
                  <select id="savedLists" onchange="loadSelectedList()"></select>
                  <button onclick="saveCurrentList()">Save Current</button>
                  <button onclick="deleteCurrentList()" class="btn-danger">Delete Selected</button>
@@ -348,14 +397,56 @@ app.get('/', (c) => {
 
 // --- API ROUTES FOR SAVE/LOAD ---
 
+const ORDER_KEY = 'config:list_order';
+
+async function getListOrder(env) {
+    const raw = await env.SIEVE_DATA.get(ORDER_KEY);
+    try {
+        return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+}
+
+async function saveListOrder(env, order) {
+    // Deduplicate and filter empty
+    const unique = [...new Set(order)].filter(x => x);
+    await env.SIEVE_DATA.put(ORDER_KEY, JSON.stringify(unique));
+}
+
 app.get('/api/lists', async (c) => {
     if (c.env.DEMO_MODE === 'true') {
         return c.json([]);
     }
     try {
         const list = await c.env.SIEVE_DATA.list({ prefix: 'list:' });
-        return c.json(list.keys.map(k => k.name.substring(5))); // remove 'list:' prefix
+        const allNames = list.keys.map(k => k.name.substring(5)); // remove 'list:' prefix
+        
+        // Sort based on stored order
+        const order = await getListOrder(c.env);
+        
+        // Create a Set for robust lookup
+        const nameSet = new Set(allNames);
+        
+        // 1. Add items from 'order' that still exist in 'allNames'
+        const sorted = order.filter(n => nameSet.has(n));
+        
+        // 2. Add remaining items from 'allNames' that weren't in 'order' (append to end)
+        const sortedSet = new Set(sorted);
+        allNames.forEach(n => {
+            if (!sortedSet.has(n)) sorted.push(n);
+        });
+        
+        return c.json(sorted);
     } catch(e) { return c.json([]); }
+});
+
+app.post('/api/lists/order', async (c) => {
+    if (c.env.DEMO_MODE === 'true') return c.json({ error: "Demo Mode" }, 403);
+    try {
+        const newOrder = await c.req.json();
+        if (!Array.isArray(newOrder)) return c.json({ error: "Invalid body" }, 400);
+        await saveListOrder(c.env, newOrder);
+        return c.json({ success: true });
+    } catch(e) { return c.json({ error: e.message }, 500); }
 });
 
 app.get('/api/lists/:name', async (c) => {
@@ -374,7 +465,17 @@ app.put('/api/lists/:name', async (c) => {
     }
     const name = c.req.param('name');
     const content = await c.req.text();
+    
+    // update KV
     await c.env.SIEVE_DATA.put('list:' + name, content);
+    
+    // update Order if new
+    const order = await getListOrder(c.env);
+    if (!order.includes(name)) {
+        order.push(name);
+        await saveListOrder(c.env, order);
+    }
+    
     return c.json({ success: true });
 });
 
@@ -385,6 +486,14 @@ app.delete('/api/lists/:name', async (c) => {
     }
     const name = c.req.param('name');
     await c.env.SIEVE_DATA.delete('list:' + name);
+    
+    // Remove from order
+    const order = await getListOrder(c.env);
+    const newOrder = order.filter(n => n !== name);
+    if (newOrder.length !== order.length) {
+        await saveListOrder(c.env, newOrder);
+    }
+    
     return c.json({ success: true });
 });
 
