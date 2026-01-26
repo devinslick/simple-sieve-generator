@@ -203,8 +203,19 @@ app.get('/', (c) => {
                 
                 // Use Folder Name field for list name
                 const name = document.getElementById('folderName').value.trim();
-                
-                if(!name) {
+                                                    '.btn-primary { background-color: var(--primary); color: white; }' +
+                                                    '.btn-danger { background-color: var(--danger); color: white; }' +
+                                                    '.controls-row { display: flex; gap: 10px; flex-wrap: wrap; }' +
+                                                    '.controls-row select { flex: 1; min-width: 250px; margin-bottom: 0; }' +
+                                                    '.controls-row button { flex-shrink: 0; }' +
+                                                    '.log-box { font-family: monospace; font-size: 0.85em; color: var(--text-muted); background: var(--log-bg); padding: 1rem; border-radius: 6px; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; white-space: pre-wrap; }' +
+                                                    '/* Theme Toggle */' +
+                                                    '.theme-toggle { background: none; border: 1px solid var(--border); padding: 0.5rem; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; }' +
+                                                    '/* Responsive */' +
+                                                    '@media (max-width: 600px) { .controls-row { flex-direction: column; } .controls-row select, .controls-row button { width: 100%; } h1 { font-size: 1.5rem; } body { padding: 0.75rem; } }' +
+                                                    '/* Basic Mode Builder */' +
+                                                    '.builder-mode-hidden { display: none; }' +
+                                                    '.builder-section { margin-bottom: 2rem; ' +
                     alert("Please enter a Folder Name to save this list.");
                     return;
                 }
