@@ -454,27 +454,20 @@ app.get('/', (c) => {
             }
 
             function parseRulesToBuilder(text) {
-                const lines = text.split('\\n');
-                const state = { global: [], scoped: [], raw: [] };
+                const lines = text.split('\n');
+                const state = { global: [], scoped: [], alias: [], raw: [] };
                 let scope = 'global';
-                
                 for (let line of lines) {
                     const originalLine = line;
                     line = line.trim();
-                    if (!line || line.startsWith('#')) {
-                        // Keep comments/empty lines in raw if needed, or ignore?
-                        // For now, let's ignore explicitly but preserve unparsable lines
-                        continue;
-                    }
-                    
+                    if (!line || line.startsWith('#')) continue;
                     // Scope switching
                     if (line === '!' || line === 'scoped') { scope = 'scoped'; continue; }
                     if (line === 'global') { scope = 'global'; continue; }
-                    
                     // Handle inline definition: "global ..." or "! ..."
                     let lineScope = scope;
                     let cleanLine = line;
-                    if (cleanLine.startsWith('!')) {
+                    if (cleanLine.startsWith('!') && !cleanLine.match(/^![^!]+!/)) {
                         lineScope = 'scoped';
                         cleanLine = cleanLine.substring(1).trim();
                         if(!cleanLine) continue;
@@ -482,29 +475,49 @@ app.get('/', (c) => {
                         lineScope = 'global';
                         cleanLine = cleanLine.substring(7).trim();
                     }
-                    
-                    // Check for Aliases (Not supported in Basic V1 yet)
-                    if (cleanLine.startsWith('!api')) { // simple check for alias pattern !x!
-                         state.raw.push(originalLine);
-                         continue;
+                    // Alias rule: !alias1,alias2!CODE [Args]
+                    let aliasMatch = cleanLine.match(/^!([^!]+)!(.*)$/);
+                    if (aliasMatch) {
+                        const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
+                        const rest = aliasMatch[2].trim();
+                        // Parse code/flags and match/label
+                        const parts = rest.split(/\s+/);
+                        const first = parts[0];
+                        const last = parts.length > 0 ? parts[parts.length - 1] : '';
+                        let dsl = helperParseDSL(first);
+                        let match = rest.substring(first.length).trim();
+                        if (!(dsl && dsl.hasFlags)) {
+                            dsl = helperParseDSL(last);
+                            if (dsl && dsl.hasFlags) {
+                                match = rest.substring(0, rest.length - last.length).trim();
+                            } else {
+                                dsl = { F: true };
+                            }
+                        }
+                        // If D flag and match present, treat as label
+                        if (dsl && dsl.D && !dsl.label && match) {
+                            dsl.label = match;
+                            match = '';
+                        }
+                        state.alias.push({
+                            aliases,
+                            match,
+                            flags: dsl
+                        });
+                        continue;
                     }
-
                     // Parse Type
                     let type = 'subject';
                     if (cleanLine.toLowerCase().startsWith('from:')) {
                         type = 'from';
                         cleanLine = cleanLine.substring(5).trim();
                     }
-                    
                     // Parse Code/Match
-                    // Try Last first
                     const parts = cleanLine.split(/\s+/);
                     const first = parts[0];
                     const last = parts.length > 0 ? parts[parts.length - 1] : '';
-                    
                     let dsl = helperParseDSL(last);
                     let match = cleanLine;
-                    
                     if (dsl && dsl.hasFlags) {
                         match = cleanLine.substring(0, cleanLine.length - last.length).trim();
                     } else {
@@ -512,24 +525,19 @@ app.get('/', (c) => {
                         if (dsl && dsl.hasFlags) {
                             match = cleanLine.substring(first.length).trim();
                         } else {
-                            // No code found -> default F
-                            dsl = { F: true }; 
+                            dsl = { F: true };
                         }
                     }
-                    
-                    // If match contains wild alias syntax (!...!) it's too complex for basic
                     if (match.includes('!')) {
                         state.raw.push(originalLine);
                         continue;
                     }
-                    
                     state[lineScope].push({
                         type,
                         match,
                         flags: dsl
                     });
                 }
-                
                 BUILDER_STATE = state;
             }
             
@@ -556,32 +564,36 @@ app.get('/', (c) => {
                 const globalLines = BUILDER_STATE.global.map(r => {
                     const prefix = r.type === 'from' ? 'from:' : '';
                     const code = generateFlagsString(r.flags);
-                    // Format: global from:foo CODE
-                    // Or just: from:foo CODE (since we are in global section)
                     return prefix + r.match + ' ' + code;
                 });
-                
                 const scopedLines = BUILDER_STATE.scoped.map(r => {
                     const prefix = r.type === 'from' ? 'from:' : '';
                     const code = generateFlagsString(r.flags);
                     return prefix + r.match + ' ' + code;
                 });
-                
+                const aliasLines = BUILDER_STATE.alias.map(r => {
+                    const aliasStr = '!' + r.aliases.join(',') + '!';
+                    const code = generateFlagsString(r.flags);
+                    let line = aliasStr + code;
+                    if (r.match && r.match.length > 0) {
+                        line += ' ' + r.match;
+                    }
+                    return line;
+                });
                 let text = '';
-                
                 if (globalLines.length > 0) {
-                    text += 'global\\n' + globalLines.join('\\n') + '\\n\\n';
+                    text += 'global\n' + globalLines.join('\n') + '\n\n';
                 }
-                
                 if (scopedLines.length > 0) {
-                    text += 'scoped\\n' + scopedLines.join('\\n') + '\\n\\n';
+                    text += 'scoped\n' + scopedLines.join('\n') + '\n\n';
                 }
-                
+                if (aliasLines.length > 0) {
+                    text += aliasLines.join('\n') + '\n\n';
+                }
                 if (BUILDER_STATE.raw.length > 0) {
-                    text += '# --- Raw/Unparsed Rules ---\\n';
-                    text += BUILDER_STATE.raw.join('\\n');
+                    text += '# --- Raw/Unparsed Rules ---\n';
+                    text += BUILDER_STATE.raw.join('\n');
                 }
-                
                 document.getElementById('rulesInput').value = text;
             }
 
@@ -593,10 +605,10 @@ app.get('/', (c) => {
                 
                 // Section: Global
                 container.appendChild(createSection('Global Rules (All Emails)', 'global', BUILDER_STATE.global));
-                
                 // Section: Scoped
                 container.appendChild(createSection('Folder Rules (Only this Folder)', 'scoped', BUILDER_STATE.scoped));
-                
+                // Section: Alias
+                container.appendChild(createAliasSection('Alias Rules (Forwarded to you)', BUILDER_STATE.alias));
                 // Raw Warning
                 if (BUILDER_STATE.raw.length > 0) {
                     const div = document.createElement('div');
@@ -605,6 +617,91 @@ app.get('/', (c) => {
                     div.innerText = BUILDER_STATE.raw.length + ' rules are hidden (too complex for Basic Mode). They will be preserved.';
                     container.appendChild(div);
                 }
+            }
+
+            function createAliasSection(title, rows) {
+                const sect = document.createElement('div');
+                sect.className = 'builder-section';
+                const h3 = document.createElement('h3');
+                h3.innerText = title;
+                sect.appendChild(h3);
+                const list = document.createElement('div');
+                rows.forEach((row, idx) => {
+                    list.appendChild(createAliasRow(idx, row));
+                });
+                sect.appendChild(list);
+                const addBtn = document.createElement('button');
+                addBtn.className = 'add-rule-btn';
+                addBtn.innerText = '+ Add Alias Rule';
+                addBtn.onclick = () => {
+                    BUILDER_STATE.alias.push({
+                        aliases: ['alias'],
+                        match: '',
+                        flags: { F: true, R: false, A: false, S: false, B: false, D: false }
+                    });
+                    renderBuilder();
+                    updateFromBuilder();
+                };
+                sect.appendChild(addBtn);
+                return sect;
+            }
+
+            function createAliasRow(idx, data) {
+                const row = document.createElement('div');
+                row.className = 'rule-row';
+                // Aliases input
+                const aliasInput = document.createElement('input');
+                aliasInput.type = 'text';
+                aliasInput.placeholder = 'alias1,alias2';
+                aliasInput.value = data.aliases.join(',');
+                aliasInput.oninput = (e) => {
+                    data.aliases = e.target.value.split(',').map(s => s.trim()).filter(s => s);
+                    updateFromBuilder();
+                };
+                row.appendChild(aliasInput);
+                // Flags
+                const actions = document.createElement('div');
+                actions.className = 'rule-actions';
+                const addCheck = (label, key) => {
+                    const l = document.createElement('label');
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = !!data.flags[key];
+                    cb.onchange = (e) => {
+                        data.flags[key] = e.target.checked;
+                        updateFromBuilder();
+                    };
+                    l.appendChild(cb);
+                    l.appendChild(document.createTextNode(label));
+                    actions.appendChild(l);
+                };
+                addCheck('File', 'F');
+                addCheck('Read', 'R');
+                addCheck('Stop', 'S');
+                addCheck('Designate', 'D');
+                row.appendChild(actions);
+                // Match/Label input
+                const matchInput = document.createElement('input');
+                matchInput.type = 'text';
+                matchInput.placeholder = 'Label or Subject Match';
+                matchInput.value = data.match;
+                matchInput.oninput = (e) => {
+                    data.match = e.target.value;
+                    updateFromBuilder();
+                };
+                row.appendChild(matchInput);
+                // Delete
+                const del = document.createElement('button');
+                del.className = 'rule-delete-btn';
+                del.innerText = '🗑️';
+                del.onclick = () => {
+                    BUILDER_STATE.alias.splice(idx, 1);
+                    renderBuilder();
+                    updateFromBuilder();
+                };
+                row.appendChild(del);
+                return row;
+            }
             }
             
             function createSection(title, scopeName, rows) {
