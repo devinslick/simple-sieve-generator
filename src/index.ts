@@ -150,6 +150,33 @@ app.get('/', (c) => {
             h1 { font-size: 1.5rem; }
             body { padding: 0.75rem; }
           }
+
+          /* Basic Mode Builder */
+          .builder-mode-hidden { display: none; }
+          .builder-section { 
+              margin-bottom: 2rem; 
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              padding: 1rem;
+              background-color: var(--bg-card);
+          }
+          .builder-section h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+          .rule-row {
+              display: flex;
+              gap: 8px;
+              margin-bottom: 10px;
+              align-items: center;
+              padding: 8px;
+              background: var(--bg-input);
+              border-radius: 4px;
+              flex-wrap: wrap;
+          }
+          .rule-row select, .rule-row input[type="text"] { margin-bottom: 0; width: auto; flex: 1; min-width: 150px; }
+          .rule-actions { display: flex; gap: 8px; align-items: center; }
+          .rule-actions label { margin-bottom: 0; font-weight: normal; font-size: 0.85em; display: flex; align-items: center; gap: 4px; }
+          .rule-delete-btn { background: var(--danger); color: white; padding: 4px 8px; font-size: 0.8em; width: auto; }
+          .add-rule-btn { width: 100%; padding: 8px; border: 1px dashed var(--border); background: none; color: var(--text-muted); }
+          .add-rule-btn:hover { background: var(--border); color: var(--text); }
         </style>
         <script>
             // --- UI LOGIC ---
@@ -345,10 +372,336 @@ app.get('/', (c) => {
             // Init
             window.onload = () => {
                 initTheme();
+                
+                // Init Builder State
+                const mode = localStorage.getItem('editorMode') || 'basic';
+                setEditorMode(mode);
+                
                 loadListNames();
             };
-        </script>
-      </head>
+
+            // --- BUILDER LOGIC ---
+
+            let BUILDER_STATE = {
+                global: [],
+                scoped: [],
+                raw: [] // content we couldn't parse
+            };
+
+            function setEditorMode(mode) {
+                localStorage.setItem('editorMode', mode);
+                const textArea = document.getElementById('rulesInput');
+                const builder = document.getElementById('basicBuilder');
+                const toggle = document.getElementById('modeToggle');
+                const legendLink = document.getElementById('legendLink');
+                
+                if (mode === 'basic') {
+                    // Sync Text -> Builder
+                    parseRulesToBuilder(textArea.value);
+                    renderBuilder();
+                    
+                    textArea.classList.add('builder-mode-hidden');
+                    builder.classList.remove('builder-mode-hidden');
+                    legendLink.style.display = 'none';
+                    toggle.innerText = 'Switch to Advanced (Text)';
+                } else {
+                    // Sync Builder -> Text (Implicitly done on change, but ensure)
+                    // Actually, if we are switching TO text, the text area is already updated by the changers
+                    
+                    textArea.classList.remove('builder-mode-hidden');
+                    builder.classList.add('builder-mode-hidden');
+                    legendLink.style.display = 'inline';
+                    toggle.innerText = 'Switch to Basic (Builder)';
+                }
+            }
+            
+            function toggleEditorMode() {
+                const current = localStorage.getItem('editorMode') || 'basic';
+                setEditorMode(current === 'basic' ? 'advanced' : 'basic');
+            }
+
+            // --- Frontend Code Parsing (Ported from Backend) ---
+            
+            function helperParseDSL(token) {
+                // Matches parseDSL in backend
+                if (!token) return null;
+                let temp = token;
+                let label = null;
+                let expire = null;
+                
+                const labelMatch = temp.match(/!([\w-]+)!/);
+                if (labelMatch) {
+                    label = labelMatch[1];
+                    temp = temp.replace(labelMatch[0], '');
+                }
+                const expireMatch = temp.match(/x(\d+)([dh]?)/i);
+                if (expireMatch) {
+                    expire = `x\${expireMatch[1]}\${expireMatch[2]}`;
+                    temp = temp.replace(expireMatch[0], '');
+                }
+                
+                if (temp.length > 0 && !/^[frasbd]+$/i.test(temp)) return null;
+                
+                return {
+                    F: /f/i.test(temp),
+                    R: /r/i.test(temp),
+                    A: /a/i.test(temp),
+                    S: /s/i.test(temp),
+                    B: /b/i.test(temp),
+                    label: label,
+                    expire: expire,
+                    hasFlags: (temp.length > 0 || label !== null || expire !== null)
+                };
+            }
+
+            function parseRulesToBuilder(text) {
+                const lines = text.split('\n');
+                const state = { global: [], scoped: [], raw: [] };
+                let scope = 'global';
+                
+                for (let line of lines) {
+                    const originalLine = line;
+                    line = line.trim();
+                    if (!line || line.startsWith('#')) {
+                        // Keep comments/empty lines in raw if needed, or ignore?
+                        // For now, let's ignore explicitly but preserve unparsable lines
+                        continue;
+                    }
+                    
+                    // Scope switching
+                    if (line === '!' || line === 'scoped') { scope = 'scoped'; continue; }
+                    if (line === 'global') { scope = 'global'; continue; }
+                    
+                    // Handle inline definition: "global ..." or "! ..."
+                    let lineScope = scope;
+                    let cleanLine = line;
+                    if (cleanLine.startsWith('!')) {
+                        lineScope = 'scoped';
+                        cleanLine = cleanLine.substring(1).trim();
+                        if(!cleanLine) continue;
+                    } else if (cleanLine.toLowerCase().startsWith('global ')) {
+                        lineScope = 'global';
+                        cleanLine = cleanLine.substring(7).trim();
+                    }
+                    
+                    // Check for Aliases (Not supported in Basic V1 yet)
+                    if (cleanLine.startsWith('!api')) { // simple check for alias pattern !x!
+                         state.raw.push(originalLine);
+                         continue;
+                    }
+
+                    // Parse Type
+                    let type = 'subject';
+                    if (cleanLine.toLowerCase().startsWith('from:')) {
+                        type = 'from';
+                        cleanLine = cleanLine.substring(5).trim();
+                    }
+                    
+                    // Parse Code/Match
+                    // Try Last first
+                    const parts = cleanLine.split(/\s+/);
+                    const first = parts[0];
+                    const last = parts.length > 0 ? parts[parts.length - 1] : '';
+                    
+                    let dsl = helperParseDSL(last);
+                    let match = cleanLine;
+                    
+                    if (dsl && dsl.hasFlags) {
+                        match = cleanLine.substring(0, cleanLine.length - last.length).trim();
+                    } else {
+                        dsl = helperParseDSL(first);
+                        if (dsl && dsl.hasFlags) {
+                            match = cleanLine.substring(first.length).trim();
+                        } else {
+                            // No code found -> default F
+                            dsl = { F: true }; 
+                        }
+                    }
+                    
+                    // If match contains wild alias syntax (!...!) it's too complex for basic
+                    if (match.includes('!')) {
+                        state.raw.push(originalLine);
+                        continue;
+                    }
+                    
+                    state[lineScope].push({
+                        type,
+                        match,
+                        flags: dsl
+                    });
+                }
+                
+                BUILDER_STATE = state;
+            }
+            
+            function generateFlagsString(f) {
+                // Returns e.g. "FRAS", "B", "Ax2h", "F!label!"
+                let s = '';
+                // Logic: Default is usually File (F). 
+                // But generally explicit is better.
+                if (f.F) s += 'F';
+                if (f.R) s += 'R';
+                if (f.A) s += 'A';
+                if (f.S) s += 'S';
+                if (f.B) s += 'B';
+                
+                if (f.expire) s += f.expire;
+                if (f.label) s += `!${f.label}!`;
+                
+                // If empty, default to F? Generator handles "default".
+                // But let's be explicit if F is checked.
+                return s; 
+            }
+
+            function updateFromBuilder() {
+                const globalLines = BUILDER_STATE.global.map(r => {
+                    const prefix = r.type === 'from' ? 'from:' : '';
+                    const code = generateFlagsString(r.flags);
+                    // Format: global from:foo CODE
+                    // Or just: from:foo CODE (since we are in global section)
+                    return `${prefix}${r.match} ${code}`;
+                });
+                
+                const scopedLines = BUILDER_STATE.scoped.map(r => {
+                    const prefix = r.type === 'from' ? 'from:' : '';
+                    const code = generateFlagsString(r.flags);
+                    return `${prefix}${r.match} ${code}`;
+                });
+                
+                let text = '';
+                
+                if (globalLines.length > 0) {
+                    text += 'global\n' + globalLines.join('\n') + '\n\n';
+                }
+                
+                if (scopedLines.length > 0) {
+                    text += 'scoped\n' + scopedLines.join('\n') + '\n\n';
+                }
+                
+                if (BUILDER_STATE.raw.length > 0) {
+                    text += '# --- Raw/Unparsed Rules ---\n';
+                    text += BUILDER_STATE.raw.join('\n');
+                }
+                
+                document.getElementById('rulesInput').value = text;
+            }
+
+            // --- Builder Rendering ---
+
+            function renderBuilder() {
+                const container = document.getElementById('basicBuilder');
+                container.innerHTML = '';
+                
+                // Section: Global
+                container.appendChild(createSection('Global Rules (All Emails)', 'global', BUILDER_STATE.global));
+                
+                // Section: Scoped
+                container.appendChild(createSection('Folder Rules (Only this Folder)', 'scoped', BUILDER_STATE.scoped));
+                
+                // Raw Warning
+                if (BUILDER_STATE.raw.length > 0) {
+                    const div = document.createElement('div');
+                    div.style.color = 'var(--warning)';
+                    div.style.fontSize = '0.9em';
+                    div.innerText = `${BUILDER_STATE.raw.length} rules are hidden (too complex for Basic Mode). They will be preserved.`;
+                    container.appendChild(div);
+                }
+            }
+            
+            function createSection(title, scopeName, rows) {
+                const sect = document.createElement('div');
+                sect.className = 'builder-section';
+                
+                const h3 = document.createElement('h3');
+                h3.innerText = title;
+                sect.appendChild(h3);
+                
+                const list = document.createElement('div');
+                rows.forEach((row, idx) => {
+                    list.appendChild(createRow(scopeName, idx, row));
+                });
+                sect.appendChild(list);
+                
+                const addBtn = document.createElement('button');
+                addBtn.className = 'add-rule-btn';
+                addBtn.innerText = '+ Add Rule';
+                addBtn.onclick = () => {
+                    BUILDER_STATE[scopeName].push({
+                        type: 'subject',
+                        match: '',
+                        flags: { F: true, R: false, A: false, S: false, B: false } // Default
+                    });
+                    renderBuilder();
+                    updateFromBuilder();
+                };
+                sect.appendChild(addBtn);
+                
+                return sect;
+            }
+            
+            function createRow(scopeName, idx, data) {
+                 const row = document.createElement('div');
+                 row.className = 'rule-row';
+                 
+                 // Type Select
+                 const typeSel = document.createElement('select');
+                 typeSel.innerHTML = '<option value="subject">Subject</option><option value="from">From</option>';
+                 typeSel.value = data.type;
+                 typeSel.onchange = (e) => {
+                     data.type = e.target.value;
+                     updateFromBuilder();
+                 };
+                 row.appendChild(typeSel);
+                 
+                 // Match Input
+                 const input = document.createElement('input');
+                 input.type = 'text';
+                 input.placeholder = data.type === 'from' ? 'user@example.com' : 'Text to match';
+                 input.value = data.match;
+                 input.oninput = (e) => {
+                     data.match = e.target.value;
+                     updateFromBuilder();
+                 };
+                 row.appendChild(input);
+                 
+                 // Flags
+                 const actions = document.createElement('div');
+                 actions.className = 'rule-actions';
+                 
+                 const addCheck = (label, key) => {
+                     const l = document.createElement('label');
+                     const cb = document.createElement('input');
+                     cb.type = 'checkbox';
+                     cb.checked = !!data.flags[key];
+                     cb.onchange = (e) => {
+                         data.flags[key] = e.target.checked;
+                         updateFromBuilder();
+                     };
+                     l.appendChild(cb);
+                     l.appendChild(document.createTextNode(label));
+                     actions.appendChild(l);
+                 };
+                 
+                 addCheck('File', 'F');
+                 addCheck('Read', 'R');
+                 addCheck('Stop', 'S');
+                 
+                 row.appendChild(actions);
+                 
+                 // Delete
+                 const del = document.createElement('button');
+                 del.className = 'rule-delete-btn';
+                 del.innerText = '🗑️';
+                 del.onclick = () => {
+                     BUILDER_STATE[scopeName].splice(idx, 1);
+                     renderBuilder();
+                     updateFromBuilder();
+                 };
+                 row.appendChild(del);
+                 
+                 return row;
+            }
+
       <body>
         <header>
             <h1>
@@ -377,8 +730,13 @@ app.get('/', (c) => {
         </div>
         
         <div>
-          <label for="rulesInput">Rules List: <a href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a></label>
+          <label for="rulesInput">
+              Rules List: 
+              <a id="legendLink" href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a>
+              <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Switch to Basic</button>
+          </label>
           <textarea id="rulesInput" placeholder="!alias1,alias2!FRASD deal&#10;!scope&#10;Subject Rule F&#10;from:sender@example.com FR"></textarea>
+          <div id="basicBuilder" class="builder-mode-hidden"></div>
         </div>
         
         <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
