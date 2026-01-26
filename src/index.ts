@@ -372,12 +372,11 @@ app.get('/', (c) => {
             // Init
             window.onload = () => {
                 initTheme();
-                
-                // Init Builder State
-                const mode = localStorage.getItem('editorMode') || 'basic';
-                setEditorMode(mode);
-                
                 loadListNames();
+                
+                // Init Builder State after everything loads
+                const mode = localStorage.getItem('editorMode') || 'advanced';
+                setEditorMode(mode);
             };
 
             // --- BUILDER LOGIC ---
