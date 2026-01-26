@@ -249,7 +249,7 @@ app.get('/', (c) => {
                 
                 const content = document.getElementById('rulesInput').value;
                 try {
-                    await fetch(\`/api/lists/\${name}\`, { method: 'PUT', body: content });
+                    await fetch('/api/lists/' + name, { method: 'PUT', body: content });
                     alert('Saved as "' + name + '"!');
                     loadListNames(); 
                     // Set dropdown to this new name if exists
@@ -310,7 +310,7 @@ app.get('/', (c) => {
                 if(!confirm('Are you sure you want to delete the list "' + name + '"?')) return;
                 
                 try {
-                    await fetch(\`/api/lists/\${name}\`, { method: 'DELETE' });
+                    await fetch('/api/lists/' + name, { method: 'DELETE' });
                     alert('Deleted!');
                     loadListNames();
                     document.getElementById('rulesInput').value = '';
@@ -325,7 +325,7 @@ app.get('/', (c) => {
                 // Update Folder Name input match selected list
                 document.getElementById('folderName').value = name;
                 
-                const res = await fetch(\`/api/lists/\${name}\`);
+                const res = await fetch('/api/lists/' + name);
                 if(res.ok) {
                     document.getElementById('rulesInput').value = await res.text();
                 }
