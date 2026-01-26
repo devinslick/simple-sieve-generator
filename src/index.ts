@@ -454,7 +454,7 @@ app.get('/', (c) => {
             }
 
             function parseRulesToBuilder(text) {
-                const lines = text.split('\n');
+                const lines = text.split('\\n');
                 const state = { global: [], scoped: [], raw: [] };
                 let scope = 'global';
                 
