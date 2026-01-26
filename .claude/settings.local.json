@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git rev-parse:*)"
+      "Bash(git rev-parse:*)",
+      "Bash(cmd.exe /c \"echo %PATH%\")"
     ]
   }
 }

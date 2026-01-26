@@ -153,35 +153,14 @@ app.get('/', (c) => {
               background: var(--bg-input);
               border-radius: 4px;
               flex-wrap: wrap;
-          }
-          .rule-row select, .rule-row input[type="text"] { margin-bottom: 0; width: auto; flex: 1; min-width: 150px; }
-          .rule-actions { display: flex; gap: 8px; align-items: center; }
-          .rule-actions label { margin-bottom: 0; font-weight: normal; font-size: 0.85em; display: flex; align-items: center; gap: 4px; }
-          .rule-delete-btn { background: var(--danger); color: white; padding: 4px 8px; font-size: 0.8em; width: auto; }
-          .add-rule-btn { width: 100%; padding: 8px; border: 1px dashed var(--border); background: none; color: var(--text-muted); }
-          .add-rule-btn:hover { background: var(--border); color: var(--text); }
-        </style>
-        <script>
-            // --- UI LOGIC ---
-            const IS_DEMO = ${isDemo};
-            let ALL_LISTS = [];
-
-            function initTheme() {
-                const stored = localStorage.getItem('theme');
-                if (stored) {
-                    document.documentElement.setAttribute('data-theme', stored);
-                } else {
-                    // Default is Dark (no attribute needed as per :root)
-                }
-                updateThemeIcon();
-            }
-
-            function toggleTheme() {
-                const current = document.documentElement.getAttribute('data-theme');
-                const next = current === 'light' ? 'dark' : 'light';
-                document.documentElement.setAttribute('data-theme', next);
-                localStorage.setItem('theme', next);
-                updateThemeIcon();
+                                                                '.btn-primary { background-color: var(--primary); color: white; }' +
+                                                                '.btn-danger { background-color: var(--danger); color: white; }' +
+                                                                '.controls-row { display: flex; gap: 10px; flex-wrap: wrap; }' +
+                                                                '.controls-row select { flex: 1; min-width: 250px; margin-bottom: 0; }' +
+                                                                '.controls-row button { flex-shrink: 0; }' +
+                                                                '.log-box { font-family: monospace; font-size: 0.85em; color: var(--text-muted); background: var(--log-bg); padding: 1rem; border-radius: 6px; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; white-space: pre-wrap; }' +
+                                                                '/* Theme Toggle */' +
+                                                                '.theme-toggle { background: none; border: 1px solid var(--border); padding: 0.5rem; border-radius: 50%;' +
             }
 
             function updateThemeIcon() {
