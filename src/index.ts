@@ -435,7 +435,7 @@ app.get('/', (c) => {
                 }
                 const expireMatch = temp.match(/x(\d+)([dh]?)/i);
                 if (expireMatch) {
-                    expire = \`x\${expireMatch[1]}\${expireMatch[2]}\`;
+                    expire = 'x' + expireMatch[1] + expireMatch[2];
                     temp = temp.replace(expireMatch[0], '');
                 }
                 
@@ -545,7 +545,7 @@ app.get('/', (c) => {
                 if (f.B) s += 'B';
                 
                 if (f.expire) s += f.expire;
-                if (f.label) s += \`!\${f.label}!\`;
+                if (f.label) s += '!' + f.label + '!';
                 
                 // If empty, default to F? Generator handles "default".
                 // But let's be explicit if F is checked.
@@ -558,13 +558,13 @@ app.get('/', (c) => {
                     const code = generateFlagsString(r.flags);
                     // Format: global from:foo CODE
                     // Or just: from:foo CODE (since we are in global section)
-                    return \`\${prefix}\${r.match} \${code}\`;
+                    return prefix + r.match + ' ' + code;
                 });
                 
                 const scopedLines = BUILDER_STATE.scoped.map(r => {
                     const prefix = r.type === 'from' ? 'from:' : '';
                     const code = generateFlagsString(r.flags);
-                    return \`\${prefix}\${r.match} \${code}\`;
+                    return prefix + r.match + ' ' + code;
                 });
                 
                 let text = '';
@@ -602,7 +602,7 @@ app.get('/', (c) => {
                     const div = document.createElement('div');
                     div.style.color = 'var(--warning)';
                     div.style.fontSize = '0.9em';
-                    div.innerText = \`\${BUILDER_STATE.raw.length} rules are hidden (too complex for Basic Mode). They will be preserved.\`;
+                    div.innerText = BUILDER_STATE.raw.length + ' rules are hidden (too complex for Basic Mode). They will be preserved.';
                     container.appendChild(div);
                 }
             }
