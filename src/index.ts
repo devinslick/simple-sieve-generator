@@ -702,8 +702,7 @@ app.get('/', (c) => {
                 row.appendChild(del);
                 return row;
             }
-            }
-            
+
             function createSection(title, scopeName, rows) {
                 const sect = document.createElement('div');
                 sect.className = 'builder-section';
