@@ -17,27 +17,25 @@ app.get('/', (c) => {
         '<meta name="viewport" content="width=device-width, initial-scale=1">' +
         '<style>' +
         ':root {' +
-                <style>' +
-                    ':root {' +
-                        '/* Default: Dark Mode */' +
-                        '--primary: #3a8fd9;' +
-                        '--danger: #e74c3c;' +
-                        '--warning: #f39c12;' +
-                        '--bg-body: #121212;' +
-                        '--bg-card: #1e1e1e;' +
-                        '--bg-input: #2d2d2d;' +
-                        '--border: #444;' +
-                        '--text: #e0e0e0;' +
-                        '--text-muted: #aaa;' +
-                        '--log-bg: #1a1a1a;' +
-                    '}' +
-                    ':root[data-theme="light"] {' +
-                        '/* Light Mode Overrides */' +
-                        '--primary: #007bff;' +
-                        '--danger: #dc3545;' +
-                        '--bg-body: #ffffff;' +
-                        '--bg-card: #f8f9fa;' +
-                        '--bg-input: #ffffff;' +
+            '/* Default: Dark Mode */' +
+            '--primary: #3a8fd9;' +
+            '--danger: #e74c3c;' +
+            '--warning: #f39c12;' +
+            '--bg-body: #121212;' +
+            '--bg-card: #1e1e1e;' +
+            '--bg-input: #2d2d2d;' +
+            '--border: #444;' +
+            '--text: #e0e0e0;' +
+            '--text-muted: #aaa;' +
+            '--log-bg: #1a1a1a;' +
+        '}' +
+        ':root[data-theme="light"] {' +
+            '/* Light Mode Overrides */' +
+            '--primary: #007bff;' +
+            '--danger: #dc3545;' +
+            '--bg-body: #ffffff;' +
+            '--bg-card: #f8f9fa;' +
+            '--bg-input: #ffffff;' +
                         '--border: #ccc;' +
                         '--text: #333333;' +
                         '--text-muted: #666;' +
