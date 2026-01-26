@@ -9,104 +9,89 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/', (c) => {
   const isDemo = c.env.DEMO_MODE === 'true';
-  return c.html(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Simple Sieve Generator</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          :root {
-            /* Default: Dark Mode */
-            --primary: #3a8fd9;
-            --danger: #e74c3c;
-            /* Demo Mode Warning Color */
-            --warning: #f39c12; 
-            --bg-body: #121212;
-            --bg-card: #1e1e1e;
-            --bg-input: #2d2d2d;
-            --border: #444;
-            --text: #e0e0e0;
-            --text-muted: #aaa;
-            --log-bg: #1a1a1a;
-          }
-          :root[data-theme="light"] {
-            /* Light Mode Overrides */
-            --primary: #007bff;
-            --danger: #dc3545;
-            --bg-body: #ffffff;
-            --bg-card: #f8f9fa;
-            --bg-input: #ffffff;
-            --border: #ccc;
-            --text: #333333;
-            --text-muted: #666;
-            --log-bg: #f1f1f1;
-          }
-
-          * { box-sizing: border-box; }
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            max-width: 900px; 
-            margin: 0 auto; 
-            padding: 1rem;
-            background-color: var(--bg-body);
-            color: var(--text);
-            line-height: 1.6;
-            transition: background-color 0.3s, color 0.3s;
-          }
-          h1 { margin: 0; font-size: 1.75rem; }
-          
-          /* Header Layout */
-          header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-          }
-          
-          /* Forms */
-          label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem; }
-          input[type="text"], select, textarea {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 1rem;
-            margin-bottom: 1rem;
-            font-family: inherit;
-            background-color: var(--bg-input);
-            color: var(--text);
-          }
-          textarea {
-            min-height: 200px;
-            font-family: monospace;
-            resize: vertical;
-          }
-          
-          /* Buttons */
-          button { 
-            padding: 0.75rem 1.25rem; 
-            cursor: pointer; 
-            border: none;
-            border-radius: 6px;
-            font-size: 1rem;
-            font-weight: 500;
-            transition: opacity 0.2s;
-            background-color: var(--border); /* Default btn bg */
-            color: var(--text);
-          }
-          button:hover { opacity: 0.9; }
-          .btn-primary { background-color: var(--primary); color: white; }
-          .btn-danger { background-color: var(--danger); color: white; }
-          
-          /* Layout Components */
-          .card {
-            background: var(--bg-card);
-            padding: 1.25rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            border: 1px solid var(--border);
-          }
+    return c.html(
+        '<!DOCTYPE html>' +
+        '<html>' +
+        '<head>' +
+        '<title>Simple Sieve Generator</title>' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+        '<style>' +
+        ':root {' +
+                <style>' +
+                    ':root {' +
+                        '/* Default: Dark Mode */' +
+                        '--primary: #3a8fd9;' +
+                        '--danger: #e74c3c;' +
+                        '--warning: #f39c12;' +
+                        '--bg-body: #121212;' +
+                        '--bg-card: #1e1e1e;' +
+                        '--bg-input: #2d2d2d;' +
+                        '--border: #444;' +
+                        '--text: #e0e0e0;' +
+                        '--text-muted: #aaa;' +
+                        '--log-bg: #1a1a1a;' +
+                    '}' +
+                    ':root[data-theme="light"] {' +
+                        '/* Light Mode Overrides */' +
+                        '--primary: #007bff;' +
+                        '--danger: #dc3545;' +
+                        '--bg-body: #ffffff;' +
+                        '--bg-card: #f8f9fa;' +
+                        '--bg-input: #ffffff;' +
+                        '--border: #ccc;' +
+                        '--text: #333333;' +
+                        '--text-muted: #666;' +
+                        '--log-bg: #f1f1f1;' +
+                    '}' +
+                    '* { box-sizing: border-box; }' +
+                    'body {' +
+                        'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;' +
+                        'max-width: 900px;' +
+                        'margin: 0 auto;' +
+                        'padding: 1rem;' +
+                        'background-color: var(--bg-body);' +
+                        'color: var(--text);' +
+                        'line-height: 1.6;' +
+                        'transition: background-color 0.3s, color 0.3s;' +
+                    '}' +
+                    'h1 { margin: 0; font-size: 1.75rem; }' +
+                    'header {' +
+                        'display: flex;' +
+                        'justify-content: space-between;' +
+                        'align-items: center;' +
+                        'margin-bottom: 1.5rem;' +
+                    '}' +
+                    'label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem; }' +
+                    'input[type="text"], select, textarea {' +
+                        'width: 100%;' +
+                        'padding: 0.75rem;' +
+                        'border: 1px solid var(--border);' +
+                        'border-radius: 6px;' +
+                        'font-size: 1rem;' +
+                        'margin-bottom: 1rem;' +
+                        'font-family: inherit;' +
+                        'background-color: var(--bg-input);' +
+                        'color: var(--text);' +
+                    '}' +
+                    'textarea {' +
+                        'min-height: 200px;' +
+                        'font-family: monospace;' +
+                        'resize: vertical;' +
+                    '}' +
+                    'button {' +
+                        'padding: 0.75rem 1.25rem;' +
+                        'cursor: pointer;' +
+                        'border: none;' +
+                        'border-radius: 6px;' +
+                        'font-size: 1rem;' +
+                        'font-weight: 500;' +
+                        'transition: opacity 0.2s;' +
+                        'background-color: var(--border); /* Default btn bg */' +
+                        'color: var(--text);' +
+                    '}' +
+                    'button:hover { opacity: 0.9; }' +
+                    '.btn-primary { background-color: var(--primary); color: white; }' +
+                    '.btn-danger { background-color: var(--danger); color: white; }'
           
           .controls-row {
             display: flex;
