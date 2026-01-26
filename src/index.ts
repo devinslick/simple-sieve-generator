@@ -783,8 +783,23 @@ function generateSieveScript(folderName, buckets) {
             if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From", "X-Simplelogin-Original-From"] [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From", "X-Simplelogin-Original-From"] [${matches.join(', ')}]`);
+            
+            // 1. Check standard "From" header using address test
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
+            
+            // 2. Check "X-Simplelogin-Original-From" as a text header
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
+            if (matches.length) {
+                // For header matching, we need to wrap the pattern in wildcards to match the full header string
+                // e.g. "Name <email>" needs "*email*"
+                const headerMatches = matches.map(m => {
+                    const clean = m.substring(1, m.length - 1); // remove quotes
+                    return `"*${clean}*"`;
+                });
+                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+            }
+
             if (conditions.length === 0) continue;
             let body = getActionBody(suffix, ruleName);
             script += `# Global | From | ${suffix}\n`;
@@ -819,11 +834,24 @@ function generateSieveScript(folderName, buckets) {
         for (const key of scopedFromKeys) {
             const suffix = key.substring('scoped-from-'.length);
             const items = buckets[key];
-             if (!items.length) continue;
+            if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From", "X-Simplelogin-Original-From"] [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From", "X-Simplelogin-Original-From"] [${matches.join(', ')}]`);
+
+            // 1. Check standard "From" header using address test
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
+            
+            // 2. Check "X-Simplelogin-Original-From" as a text header
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
+            if (matches.length) {
+                const headerMatches = matches.map(m => {
+                    const clean = m.substring(1, m.length - 1);
+                    return `"*${clean}*"`;
+                });
+                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+            }
+
             let body = getActionBody(suffix, ruleName);
             body = body.split('\n').map(l => '  ' + l).join('\n');
             const conditionStr = conditions.join(',\n      ');
