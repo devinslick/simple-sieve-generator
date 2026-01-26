@@ -580,16 +580,18 @@ function parseRulesList(rawText) {
              if (dslFirst && dslFirst.hasFlags) {
                  dsl = dslFirst;
                  matchArgs = rest.substring(first.length).trim();
-                 
-                 // Support 'fsd' legacy separate arg for label? "FRASD label"
-                 if (dsl.flags.D && !dsl.label && parts[1]) {
-                     const labelArg = parts[1];
-                     dsl.label = labelArg;
-                     matchArgs = rest.substring(first.length + 1 + labelArg.length).trim();
-                 }
              } else if (dslLast && dslLast.hasFlags) {
                  dsl = dslLast;
                  matchArgs = rest.substring(0, rest.length - last.length).trim();
+             }
+             
+             // Handle "Designated" Label Logic (Legacy FSD support)
+             if (dsl && dsl.flags.D && !dsl.label && matchArgs) {
+                 // For Designated rules without an explicit inline label (!label!),
+                 // treat the ENTIRE remaining argument string as the Label.
+                 // This supports "FSD New Sender" -> Label="New Sender".
+                 dsl.label = matchArgs;
+                 matchArgs = ''; 
              }
              
              if (dsl) {
