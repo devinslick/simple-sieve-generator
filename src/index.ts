@@ -454,7 +454,7 @@ app.get('/', (c) => {
             }
 
             function parseRulesToBuilder(text) {
-                const lines = text.split('\n');
+                const lines = text.split('\\n');
                 const state = { global: [], scoped: [], alias: [], raw: [] };
                 let scope = 'global';
                 for (let line of lines) {
@@ -582,17 +582,17 @@ app.get('/', (c) => {
                 });
                 let text = '';
                 if (globalLines.length > 0) {
-                    text += 'global\n' + globalLines.join('\n') + '\n\n';
+                    text += 'global\\n' + globalLines.join('\\n') + '\\n\\n';
                 }
                 if (scopedLines.length > 0) {
-                    text += 'scoped\n' + scopedLines.join('\n') + '\n\n';
+                    text += 'scoped\\n' + scopedLines.join('\\n') + '\\n\\n';
                 }
                 if (aliasLines.length > 0) {
-                    text += aliasLines.join('\n') + '\n\n';
+                    text += aliasLines.join('\\n') + '\\n\\n';
                 }
                 if (BUILDER_STATE.raw.length > 0) {
-                    text += '# --- Raw/Unparsed Rules ---\n';
-                    text += BUILDER_STATE.raw.join('\n');
+                    text += '# --- Raw/Unparsed Rules ---\\n';
+                    text += BUILDER_STATE.raw.join('\\n');
                 }
                 document.getElementById('rulesInput').value = text;
             }
