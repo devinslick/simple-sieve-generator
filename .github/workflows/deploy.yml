@@ -2,8 +2,6 @@ name: Deploy
 
 on:
   push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -29,10 +27,18 @@ jobs:
       - name: Deploy to Cloudflare Workers
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          WORKER_NAME="simple-sieve-generator"
+          if [ "$BRANCH" != "main" ]; then
+            SAFE_BRANCH=$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
+            WORKER_NAME="${WORKER_NAME}-${SAFE_BRANCH}"
+          fi
+          echo "Deploying to $WORKER_NAME"
+          npx wrangler deploy --name "$WORKER_NAME"
 
       - name: Deploy Demo Mode
-        if: vars.ENABLE_DEMO_DEPLOYMENT == 'true'
+        if: vars.ENABLE_DEMO_DEPLOYMENT == 'true' && github.ref_name == 'main'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx wrangler deploy --env demo
