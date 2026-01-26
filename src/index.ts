@@ -150,10 +150,38 @@ app.get('/', (c) => {
             h1 { font-size: 1.5rem; }
             body { padding: 0.75rem; }
           }
+
+          /* Basic Mode Builder */
+          .builder-mode-hidden { display: none; }
+          .builder-section { 
+              margin-bottom: 2rem; 
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              padding: 1rem;
+              background-color: var(--bg-card);
+          }
+          .builder-section h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+          .rule-row {
+              display: flex;
+              gap: 8px;
+              margin-bottom: 10px;
+              align-items: center;
+              padding: 8px;
+              background: var(--bg-input);
+              border-radius: 4px;
+              flex-wrap: wrap;
+          }
+          .rule-row select, .rule-row input[type="text"] { margin-bottom: 0; width: auto; flex: 1; min-width: 150px; }
+          .rule-actions { display: flex; gap: 8px; align-items: center; }
+          .rule-actions label { margin-bottom: 0; font-weight: normal; font-size: 0.85em; display: flex; align-items: center; gap: 4px; }
+          .rule-delete-btn { background: var(--danger); color: white; padding: 4px 8px; font-size: 0.8em; width: auto; }
+          .add-rule-btn { width: 100%; padding: 8px; border: 1px dashed var(--border); background: none; color: var(--text-muted); }
+          .add-rule-btn:hover { background: var(--border); color: var(--text); }
         </style>
         <script>
             // --- UI LOGIC ---
             const IS_DEMO = ${isDemo};
+            let ALL_LISTS = [];
 
             function initTheme() {
                 const stored = localStorage.getItem('theme');
@@ -189,10 +217,18 @@ app.get('/', (c) => {
                 try {
                     const res = await fetch('/api/lists');
                     if(res.ok) {
-                        const lists = await res.json();
+                        ALL_LISTS = await res.json();
                         const selector = document.getElementById('savedLists');
+                        
+                        // Preserve selected if possible
+                        const savedVal = selector.value;
+                        
                         selector.innerHTML = '<option value="">-- Load Saved List --</option>' + 
-                            lists.map(l => \`<option value="\${l}">\${l}</option>\`).join('');
+                            ALL_LISTS.map(function(l) { return '<option value="' + l + '">' + l + '</option>'; }).join('');
+                            
+                        if (savedVal && ALL_LISTS.includes(savedVal)) {
+                            selector.value = savedVal;
+                        }
                     }
                 } catch(e) { console.error('Failed to load lists', e); }
             }
@@ -213,7 +249,7 @@ app.get('/', (c) => {
                 
                 const content = document.getElementById('rulesInput').value;
                 try {
-                    await fetch(\`/api/lists/\${name}\`, { method: 'PUT', body: content });
+                    await fetch('/api/lists/' + name, { method: 'PUT', body: content });
                     alert('Saved as "' + name + '"!');
                     loadListNames(); 
                     // Set dropdown to this new name if exists
@@ -221,6 +257,44 @@ app.get('/', (c) => {
                 } catch(e) { alert('Error saving: ' + e.message); }
             }
             
+            async function moveList(direction) {
+                if (IS_DEMO) return;
+                const name = document.getElementById('savedLists').value;
+                if (!name) return;
+                
+                const idx = ALL_LISTS.indexOf(name);
+                if (idx < 0) return;
+                
+                if (direction === -1 && idx > 0) {
+                     // Move Up
+                     [ALL_LISTS[idx], ALL_LISTS[idx-1]] = [ALL_LISTS[idx-1], ALL_LISTS[idx]];
+                } else if (direction === 1 && idx < ALL_LISTS.length - 1) {
+                     // Move Down
+                     [ALL_LISTS[idx], ALL_LISTS[idx+1]] = [ALL_LISTS[idx+1], ALL_LISTS[idx]];
+                } else {
+                    return; // No move possible
+                }
+                
+                // Optimistic UI Update
+                const selector = document.getElementById('savedLists');
+                selector.innerHTML = '<option value="">-- Load Saved List --</option>' + 
+                            ALL_LISTS.map(function(l) { return '<option value="' + l + '">' + l + '</option>'; }).join('');
+                selector.value = name;
+                
+                // Sync to Server
+                try {
+                    await fetch('/api/lists/order', {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(ALL_LISTS)
+                    });
+                } catch(e) {
+                    console.error('Failed to save order', e);
+                    alert('Failed to save list order');
+                    loadListNames(); // revert
+                }
+            }
+
             async function deleteCurrentList() {
                 if (IS_DEMO) {
                     alert("This feature is disabled in Demo Mode.");
@@ -236,7 +310,7 @@ app.get('/', (c) => {
                 if(!confirm('Are you sure you want to delete the list "' + name + '"?')) return;
                 
                 try {
-                    await fetch(\`/api/lists/\${name}\`, { method: 'DELETE' });
+                    await fetch('/api/lists/' + name, { method: 'DELETE' });
                     alert('Deleted!');
                     loadListNames();
                     document.getElementById('rulesInput').value = '';
@@ -251,7 +325,7 @@ app.get('/', (c) => {
                 // Update Folder Name input match selected list
                 document.getElementById('folderName').value = name;
                 
-                const res = await fetch(\`/api/lists/\${name}\`);
+                const res = await fetch('/api/lists/' + name);
                 if(res.ok) {
                     document.getElementById('rulesInput').value = await res.text();
                 }
@@ -299,7 +373,429 @@ app.get('/', (c) => {
             window.onload = () => {
                 initTheme();
                 loadListNames();
+                
+                // Init Builder State after everything loads
+                const mode = localStorage.getItem('editorMode') || 'advanced';
+                setEditorMode(mode);
             };
+
+            // --- BUILDER LOGIC ---
+
+            let BUILDER_STATE = {
+                global: [],
+                scoped: [],
+                raw: [] // content we couldn't parse
+            };
+
+            function setEditorMode(mode) {
+                localStorage.setItem('editorMode', mode);
+                const textArea = document.getElementById('rulesInput');
+                const builder = document.getElementById('basicBuilder');
+                const toggle = document.getElementById('modeToggle');
+                const legendLink = document.getElementById('legendLink');
+                
+                if (mode === 'basic') {
+                    // Sync Text -> Builder
+                    parseRulesToBuilder(textArea.value);
+                    renderBuilder();
+                    
+                    textArea.classList.add('builder-mode-hidden');
+                    builder.classList.remove('builder-mode-hidden');
+                    legendLink.style.display = 'none';
+                    toggle.innerText = 'Switch to Advanced (Text)';
+                } else {
+                    // Sync Builder -> Text (Implicitly done on change, but ensure)
+                    // Actually, if we are switching TO text, the text area is already updated by the changers
+                    
+                    textArea.classList.remove('builder-mode-hidden');
+                    builder.classList.add('builder-mode-hidden');
+                    legendLink.style.display = 'inline';
+                    toggle.innerText = 'Switch to Basic (Builder)';
+                }
+            }
+            
+            function toggleEditorMode() {
+                const current = localStorage.getItem('editorMode') || 'basic';
+                setEditorMode(current === 'basic' ? 'advanced' : 'basic');
+            }
+
+            // --- Frontend Code Parsing (Ported from Backend) ---
+            
+            function helperParseDSL(token) {
+                // Matches parseDSL in backend
+                if (!token) return null;
+                let temp = token;
+                let label = null;
+                let expire = null;
+                
+                const labelMatch = temp.match(/!([\w-]+)!/);
+                if (labelMatch) {
+                    label = labelMatch[1];
+                    temp = temp.replace(labelMatch[0], '');
+                }
+                const expireMatch = temp.match(/x(\d+)([dh]?)/i);
+                if (expireMatch) {
+                    expire = 'x' + expireMatch[1] + expireMatch[2];
+                    temp = temp.replace(expireMatch[0], '');
+                }
+                
+                if (temp.length > 0 && !/^[frasbd]+$/i.test(temp)) return null;
+                
+                return {
+                    F: /f/i.test(temp),
+                    R: /r/i.test(temp),
+                    A: /a/i.test(temp),
+                    S: /s/i.test(temp),
+                    B: /b/i.test(temp),
+                    label: label,
+                    expire: expire,
+                    hasFlags: (temp.length > 0 || label !== null || expire !== null)
+                };
+            }
+
+            function parseRulesToBuilder(text) {
+                const lines = text.split('\\n');
+                const state = { global: [], scoped: [], alias: [], raw: [] };
+                let scope = 'global';
+                for (let line of lines) {
+                    const originalLine = line;
+                    line = line.trim();
+                    if (!line || line.startsWith('#')) continue;
+                    // Scope switching
+                    if (line === '!' || line === 'scoped') { scope = 'scoped'; continue; }
+                    if (line === 'global') { scope = 'global'; continue; }
+                    // Handle inline definition: "global ..." or "! ..."
+                    let lineScope = scope;
+                    let cleanLine = line;
+                    if (cleanLine.startsWith('!') && !cleanLine.match(/^![^!]+!/)) {
+                        lineScope = 'scoped';
+                        cleanLine = cleanLine.substring(1).trim();
+                        if(!cleanLine) continue;
+                    } else if (cleanLine.toLowerCase().startsWith('global ')) {
+                        lineScope = 'global';
+                        cleanLine = cleanLine.substring(7).trim();
+                    }
+                    // Alias rule: !alias1,alias2!CODE [Args]
+                    let aliasMatch = cleanLine.match(/^!([^!]+)!(.*)$/);
+                    if (aliasMatch) {
+                        const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
+                        const rest = aliasMatch[2].trim();
+                        // Parse code/flags and match/label
+                        const parts = rest.split(/\s+/);
+                        const first = parts[0];
+                        const last = parts.length > 0 ? parts[parts.length - 1] : '';
+                        let dsl = helperParseDSL(first);
+                        let match = rest.substring(first.length).trim();
+                        if (!(dsl && dsl.hasFlags)) {
+                            dsl = helperParseDSL(last);
+                            if (dsl && dsl.hasFlags) {
+                                match = rest.substring(0, rest.length - last.length).trim();
+                            } else {
+                                dsl = { F: true };
+                            }
+                        }
+                        // If D flag and match present, treat as label
+                        if (dsl && dsl.D && !dsl.label && match) {
+                            dsl.label = match;
+                            match = '';
+                        }
+                        state.alias.push({
+                            aliases,
+                            match,
+                            flags: dsl
+                        });
+                        continue;
+                    }
+                    // Parse Type
+                    let type = 'subject';
+                    if (cleanLine.toLowerCase().startsWith('from:')) {
+                        type = 'from';
+                        cleanLine = cleanLine.substring(5).trim();
+                    }
+                    // Parse Code/Match
+                    const parts = cleanLine.split(/\s+/);
+                    const first = parts[0];
+                    const last = parts.length > 0 ? parts[parts.length - 1] : '';
+                    let dsl = helperParseDSL(last);
+                    let match = cleanLine;
+                    if (dsl && dsl.hasFlags) {
+                        match = cleanLine.substring(0, cleanLine.length - last.length).trim();
+                    } else {
+                        dsl = helperParseDSL(first);
+                        if (dsl && dsl.hasFlags) {
+                            match = cleanLine.substring(first.length).trim();
+                        } else {
+                            dsl = { F: true };
+                        }
+                    }
+                    if (match.includes('!')) {
+                        state.raw.push(originalLine);
+                        continue;
+                    }
+                    state[lineScope].push({
+                        type,
+                        match,
+                        flags: dsl
+                    });
+                }
+                BUILDER_STATE = state;
+            }
+            
+            function generateFlagsString(f) {
+                // Returns e.g. "FRAS", "B", "Ax2h", "F!label!"
+                let s = '';
+                // Logic: Default is usually File (F). 
+                // But generally explicit is better.
+                if (f.F) s += 'F';
+                if (f.R) s += 'R';
+                if (f.A) s += 'A';
+                if (f.S) s += 'S';
+                if (f.B) s += 'B';
+                
+                if (f.expire) s += f.expire;
+                if (f.label) s += '!' + f.label + '!';
+                
+                // If empty, default to F? Generator handles "default".
+                // But let's be explicit if F is checked.
+                return s; 
+            }
+
+            function updateFromBuilder() {
+                const globalLines = BUILDER_STATE.global.map(r => {
+                    const prefix = r.type === 'from' ? 'from:' : '';
+                    const code = generateFlagsString(r.flags);
+                    return prefix + r.match + ' ' + code;
+                });
+                const scopedLines = BUILDER_STATE.scoped.map(r => {
+                    const prefix = r.type === 'from' ? 'from:' : '';
+                    const code = generateFlagsString(r.flags);
+                    return prefix + r.match + ' ' + code;
+                });
+                const aliasLines = BUILDER_STATE.alias.map(r => {
+                    const aliasStr = '!' + r.aliases.join(',') + '!';
+                    const code = generateFlagsString(r.flags);
+                    let line = aliasStr + code;
+                    if (r.match && r.match.length > 0) {
+                        line += ' ' + r.match;
+                    }
+                    return line;
+                });
+                let text = '';
+                if (globalLines.length > 0) {
+                    text += 'global\\n' + globalLines.join('\\n') + '\\n\\n';
+                }
+                if (scopedLines.length > 0) {
+                    text += 'scoped\\n' + scopedLines.join('\\n') + '\\n\\n';
+                }
+                if (aliasLines.length > 0) {
+                    text += aliasLines.join('\\n') + '\\n\\n';
+                }
+                if (BUILDER_STATE.raw.length > 0) {
+                    text += '# --- Raw/Unparsed Rules ---\\n';
+                    text += BUILDER_STATE.raw.join('\\n');
+                }
+                document.getElementById('rulesInput').value = text;
+            }
+
+            // --- Builder Rendering ---
+
+            function renderBuilder() {
+                const container = document.getElementById('basicBuilder');
+                container.innerHTML = '';
+                
+                // Section: Global
+                container.appendChild(createSection('Global Rules (All Emails)', 'global', BUILDER_STATE.global));
+                // Section: Scoped
+                container.appendChild(createSection('Folder Rules (Only this Folder)', 'scoped', BUILDER_STATE.scoped));
+                // Section: Alias
+                container.appendChild(createAliasSection('Alias Rules (Forwarded to you)', BUILDER_STATE.alias));
+                // Raw Warning
+                if (BUILDER_STATE.raw.length > 0) {
+                    const div = document.createElement('div');
+                    div.style.color = 'var(--warning)';
+                    div.style.fontSize = '0.9em';
+                    div.innerText = BUILDER_STATE.raw.length + ' rules are hidden (too complex for Basic Mode). They will be preserved.';
+                    container.appendChild(div);
+                }
+            }
+
+            function createAliasSection(title, rows) {
+                const sect = document.createElement('div');
+                sect.className = 'builder-section';
+                const h3 = document.createElement('h3');
+                h3.innerText = title;
+                sect.appendChild(h3);
+                const list = document.createElement('div');
+                rows.forEach((row, idx) => {
+                    list.appendChild(createAliasRow(idx, row));
+                });
+                sect.appendChild(list);
+                const addBtn = document.createElement('button');
+                addBtn.className = 'add-rule-btn';
+                addBtn.innerText = '+ Add Alias Rule';
+                addBtn.onclick = () => {
+                    BUILDER_STATE.alias.push({
+                        aliases: ['alias'],
+                        match: '',
+                        flags: { F: true, R: false, A: false, S: false, B: false, D: false }
+                    });
+                    renderBuilder();
+                    updateFromBuilder();
+                };
+                sect.appendChild(addBtn);
+                return sect;
+            }
+
+            function createAliasRow(idx, data) {
+                const row = document.createElement('div');
+                row.className = 'rule-row';
+                // Aliases input
+                const aliasInput = document.createElement('input');
+                aliasInput.type = 'text';
+                aliasInput.placeholder = 'alias1,alias2';
+                aliasInput.value = data.aliases.join(',');
+                aliasInput.oninput = (e) => {
+                    data.aliases = e.target.value.split(',').map(s => s.trim()).filter(s => s);
+                    updateFromBuilder();
+                };
+                row.appendChild(aliasInput);
+                // Flags
+                const actions = document.createElement('div');
+                actions.className = 'rule-actions';
+                const addCheck = (label, key) => {
+                    const l = document.createElement('label');
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = !!data.flags[key];
+                    cb.onchange = (e) => {
+                        data.flags[key] = e.target.checked;
+                        updateFromBuilder();
+                    };
+                    l.appendChild(cb);
+                    l.appendChild(document.createTextNode(label));
+                    actions.appendChild(l);
+                };
+                addCheck('File', 'F');
+                addCheck('Read', 'R');
+                addCheck('Stop', 'S');
+                addCheck('Designate', 'D');
+                row.appendChild(actions);
+                // Match/Label input
+                const matchInput = document.createElement('input');
+                matchInput.type = 'text';
+                matchInput.placeholder = 'Label or Subject Match';
+                matchInput.value = data.match;
+                matchInput.oninput = (e) => {
+                    data.match = e.target.value;
+                    updateFromBuilder();
+                };
+                row.appendChild(matchInput);
+                // Delete
+                const del = document.createElement('button');
+                del.className = 'rule-delete-btn';
+                del.innerText = '🗑️';
+                del.onclick = () => {
+                    BUILDER_STATE.alias.splice(idx, 1);
+                    renderBuilder();
+                    updateFromBuilder();
+                };
+                row.appendChild(del);
+                return row;
+            }
+
+            function createSection(title, scopeName, rows) {
+                const sect = document.createElement('div');
+                sect.className = 'builder-section';
+                
+                const h3 = document.createElement('h3');
+                h3.innerText = title;
+                sect.appendChild(h3);
+                
+                const list = document.createElement('div');
+                rows.forEach((row, idx) => {
+                    list.appendChild(createRow(scopeName, idx, row));
+                });
+                sect.appendChild(list);
+                
+                const addBtn = document.createElement('button');
+                addBtn.className = 'add-rule-btn';
+                addBtn.innerText = '+ Add Rule';
+                addBtn.onclick = () => {
+                    BUILDER_STATE[scopeName].push({
+                        type: 'subject',
+                        match: '',
+                        flags: { F: true, R: false, A: false, S: false, B: false } // Default
+                    });
+                    renderBuilder();
+                    updateFromBuilder();
+                };
+                sect.appendChild(addBtn);
+                
+                return sect;
+            }
+            
+            function createRow(scopeName, idx, data) {
+                 const row = document.createElement('div');
+                 row.className = 'rule-row';
+                 
+                 // Type Select
+                 const typeSel = document.createElement('select');
+                 typeSel.innerHTML = '<option value="subject">Subject</option><option value="from">From</option>';
+                 typeSel.value = data.type;
+                 typeSel.onchange = (e) => {
+                     data.type = e.target.value;
+                     updateFromBuilder();
+                 };
+                 row.appendChild(typeSel);
+                 
+                 // Match Input
+                 const input = document.createElement('input');
+                 input.type = 'text';
+                 input.placeholder = data.type === 'from' ? 'user@example.com' : 'Text to match';
+                 input.value = data.match;
+                 input.oninput = (e) => {
+                     data.match = e.target.value;
+                     updateFromBuilder();
+                 };
+                 row.appendChild(input);
+                 
+                 // Flags
+                 const actions = document.createElement('div');
+                 actions.className = 'rule-actions';
+                 
+                 const addCheck = (label, key) => {
+                     const l = document.createElement('label');
+                     const cb = document.createElement('input');
+                     cb.type = 'checkbox';
+                     cb.checked = !!data.flags[key];
+                     cb.onchange = (e) => {
+                         data.flags[key] = e.target.checked;
+                         updateFromBuilder();
+                     };
+                     l.appendChild(cb);
+                     l.appendChild(document.createTextNode(label));
+                     actions.appendChild(l);
+                 };
+                 
+                 addCheck('File', 'F');
+                 addCheck('Read', 'R');
+                 addCheck('Stop', 'S');
+                 
+                 row.appendChild(actions);
+                 
+                 // Delete
+                 const del = document.createElement('button');
+                 del.className = 'rule-delete-btn';
+                 del.innerText = '🗑️';
+                 del.onclick = () => {
+                     BUILDER_STATE[scopeName].splice(idx, 1);
+                     renderBuilder();
+                     updateFromBuilder();
+                 };
+                 row.appendChild(del);
+                 
+                 return row;
+            }
         </script>
       </head>
       <body>
@@ -316,6 +812,8 @@ app.get('/', (c) => {
         <div class="card">
              <label for="savedLists">Load/Manage Saved List:</label>
              <div class="controls-row">
+                 <button onclick="moveList(-1)" title="Move Up" style="width: auto; padding-left: 0.5rem; padding-right: 0.5rem;">⬆️</button>
+                 <button onclick="moveList(1)" title="Move Down" style="width: auto; padding-left: 0.5rem; padding-right: 0.5rem;">⬇️</button>
                  <select id="savedLists" onchange="loadSelectedList()"></select>
                  <button onclick="saveCurrentList()">Save Current</button>
                  <button onclick="deleteCurrentList()" class="btn-danger">Delete Selected</button>
@@ -328,8 +826,13 @@ app.get('/', (c) => {
         </div>
         
         <div>
-          <label for="rulesInput">Rules List: <a href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a></label>
+          <label for="rulesInput">
+              Rules List: 
+              <a id="legendLink" href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a>
+              <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Switch to Basic</button>
+          </label>
           <textarea id="rulesInput" placeholder="!alias1,alias2!FRASD deal&#10;!scope&#10;Subject Rule F&#10;from:sender@example.com FR"></textarea>
+          <div id="basicBuilder" class="builder-mode-hidden"></div>
         </div>
         
         <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
@@ -348,14 +851,56 @@ app.get('/', (c) => {
 
 // --- API ROUTES FOR SAVE/LOAD ---
 
+const ORDER_KEY = 'config:list_order';
+
+async function getListOrder(env) {
+    const raw = await env.SIEVE_DATA.get(ORDER_KEY);
+    try {
+        return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+}
+
+async function saveListOrder(env, order) {
+    // Deduplicate and filter empty
+    const unique = [...new Set(order)].filter(x => x);
+    await env.SIEVE_DATA.put(ORDER_KEY, JSON.stringify(unique));
+}
+
 app.get('/api/lists', async (c) => {
     if (c.env.DEMO_MODE === 'true') {
         return c.json([]);
     }
     try {
         const list = await c.env.SIEVE_DATA.list({ prefix: 'list:' });
-        return c.json(list.keys.map(k => k.name.substring(5))); // remove 'list:' prefix
+        const allNames = list.keys.map(k => k.name.substring(5)); // remove 'list:' prefix
+        
+        // Sort based on stored order
+        const order = await getListOrder(c.env);
+        
+        // Create a Set for robust lookup
+        const nameSet = new Set(allNames);
+        
+        // 1. Add items from 'order' that still exist in 'allNames'
+        const sorted = order.filter(n => nameSet.has(n));
+        
+        // 2. Add remaining items from 'allNames' that weren't in 'order' (append to end)
+        const sortedSet = new Set(sorted);
+        allNames.forEach(n => {
+            if (!sortedSet.has(n)) sorted.push(n);
+        });
+        
+        return c.json(sorted);
     } catch(e) { return c.json([]); }
+});
+
+app.post('/api/lists/order', async (c) => {
+    if (c.env.DEMO_MODE === 'true') return c.json({ error: "Demo Mode" }, 403);
+    try {
+        const newOrder = await c.req.json();
+        if (!Array.isArray(newOrder)) return c.json({ error: "Invalid body" }, 400);
+        await saveListOrder(c.env, newOrder);
+        return c.json({ success: true });
+    } catch(e) { return c.json({ error: e.message }, 500); }
 });
 
 app.get('/api/lists/:name', async (c) => {
@@ -374,7 +919,17 @@ app.put('/api/lists/:name', async (c) => {
     }
     const name = c.req.param('name');
     const content = await c.req.text();
+    
+    // update KV
     await c.env.SIEVE_DATA.put('list:' + name, content);
+    
+    // update Order if new
+    const order = await getListOrder(c.env);
+    if (!order.includes(name)) {
+        order.push(name);
+        await saveListOrder(c.env, order);
+    }
+    
     return c.json({ success: true });
 });
 
@@ -385,6 +940,14 @@ app.delete('/api/lists/:name', async (c) => {
     }
     const name = c.req.param('name');
     await c.env.SIEVE_DATA.delete('list:' + name);
+    
+    // Remove from order
+    const order = await getListOrder(c.env);
+    const newOrder = order.filter(n => n !== name);
+    if (newOrder.length !== order.length) {
+        await saveListOrder(c.env, newOrder);
+    }
+    
     return c.json({ success: true });
 });
 
@@ -783,8 +1346,23 @@ function generateSieveScript(folderName, buckets) {
             if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From", "X-Simplelogin-Original-From"] [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From", "X-Simplelogin-Original-From"] [${matches.join(', ')}]`);
+            
+            // 1. Check standard "From" header using address test
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
+            
+            // 2. Check "X-Simplelogin-Original-From" as a text header
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
+            if (matches.length) {
+                // For header matching, we need to wrap the pattern in wildcards to match the full header string
+                // e.g. "Name <email>" needs "*email*"
+                const headerMatches = matches.map(m => {
+                    const clean = m.substring(1, m.length - 1); // remove quotes
+                    return `"*${clean}*"`;
+                });
+                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+            }
+
             if (conditions.length === 0) continue;
             let body = getActionBody(suffix, ruleName);
             script += `# Global | From | ${suffix}\n`;
@@ -819,11 +1397,24 @@ function generateSieveScript(folderName, buckets) {
         for (const key of scopedFromKeys) {
             const suffix = key.substring('scoped-from-'.length);
             const items = buckets[key];
-             if (!items.length) continue;
+            if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
             const conditions = [];
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains ["From", "X-Simplelogin-Original-From"] [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches ["From", "X-Simplelogin-Original-From"] [${matches.join(', ')}]`);
+
+            // 1. Check standard "From" header using address test
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
+            
+            // 2. Check "X-Simplelogin-Original-From" as a text header
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
+            if (matches.length) {
+                const headerMatches = matches.map(m => {
+                    const clean = m.substring(1, m.length - 1);
+                    return `"*${clean}*"`;
+                });
+                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+            }
+
             let body = getActionBody(suffix, ruleName);
             body = body.split('\n').map(l => '  ' + l).join('\n');
             const conditionStr = conditions.join(',\n      ');
