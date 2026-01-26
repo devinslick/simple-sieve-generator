@@ -9,87 +9,104 @@ const app = new Hono<{ Bindings: Bindings }>()
 
 app.get('/', (c) => {
   const isDemo = c.env.DEMO_MODE === 'true';
-    return c.html(
-        '<!DOCTYPE html>' +
-        '<html>' +
-        '<head>' +
-        '<title>Simple Sieve Generator</title>' +
-        '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-        '<style>' +
-        ':root {' +
-            '/* Default: Dark Mode */' +
-            '--primary: #3a8fd9;' +
-            '--danger: #e74c3c;' +
-            '--warning: #f39c12;' +
-            '--bg-body: #121212;' +
-            '--bg-card: #1e1e1e;' +
-            '--bg-input: #2d2d2d;' +
-            '--border: #444;' +
-            '--text: #e0e0e0;' +
-            '--text-muted: #aaa;' +
-            '--log-bg: #1a1a1a;' +
-        '}' +
-        ':root[data-theme="light"] {' +
-            '/* Light Mode Overrides */' +
-            '--primary: #007bff;' +
-            '--danger: #dc3545;' +
-            '--bg-body: #ffffff;' +
-            '--bg-card: #f8f9fa;' +
-            '--bg-input: #ffffff;' +
-                        '--border: #ccc;' +
-                        '--text: #333333;' +
-                        '--text-muted: #666;' +
-                        '--log-bg: #f1f1f1;' +
-                    '}' +
-                    '* { box-sizing: border-box; }' +
-                    'body {' +
-                        'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;' +
-                        'max-width: 900px;' +
-                        'margin: 0 auto;' +
-                        'padding: 1rem;' +
-                        'background-color: var(--bg-body);' +
-                        'color: var(--text);' +
-                        'line-height: 1.6;' +
-                        'transition: background-color 0.3s, color 0.3s;' +
-                    '}' +
-                    'h1 { margin: 0; font-size: 1.75rem; }' +
-                    'header {' +
-                        'display: flex;' +
-                        'justify-content: space-between;' +
-                        'align-items: center;' +
-                        'margin-bottom: 1.5rem;' +
-                    '}' +
-                    'label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem; }' +
-                    'input[type="text"], select, textarea {' +
-                        'width: 100%;' +
-                        'padding: 0.75rem;' +
-                        'border: 1px solid var(--border);' +
-                        'border-radius: 6px;' +
-                        'font-size: 1rem;' +
-                        'margin-bottom: 1rem;' +
-                        'font-family: inherit;' +
-                        'background-color: var(--bg-input);' +
-                        'color: var(--text);' +
-                    '}' +
-                    'textarea {' +
-                        'min-height: 200px;' +
-                        'font-family: monospace;' +
-                        'resize: vertical;' +
-                    '}' +
-                    'button {' +
-                        'padding: 0.75rem 1.25rem;' +
-                        'cursor: pointer;' +
-                        'border: none;' +
-                        'border-radius: 6px;' +
-                        'font-size: 1rem;' +
-                        'font-weight: 500;' +
-                        'transition: opacity 0.2s;' +
-                        'background-color: var(--border); /* Default btn bg */' +
-                        'color: var(--text);' +
-                    '}' +
-                    'button:hover { opacity: 0.9; }' +
-                    '.btn-primary { background-color: var(--primary); color: white; }' +
-                    '.btn-danger { background-color: var(--danger); color: white; }'
+  return c.html(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Simple Sieve Generator</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          :root {
+            /* Default: Dark Mode */
+            --primary: #3a8fd9;
+            --danger: #e74c3c;
+            /* Demo Mode Warning Color */
+            --warning: #f39c12; 
+            --bg-body: #121212;
+            --bg-card: #1e1e1e;
+            --bg-input: #2d2d2d;
+            --border: #444;
+            --text: #e0e0e0;
+            --text-muted: #aaa;
+            --log-bg: #1a1a1a;
+          }
+          :root[data-theme="light"] {
+            /* Light Mode Overrides */
+            --primary: #007bff;
+            --danger: #dc3545;
+            --bg-body: #ffffff;
+            --bg-card: #f8f9fa;
+            --bg-input: #ffffff;
+            --border: #ccc;
+            --text: #333333;
+            --text-muted: #666;
+            --log-bg: #f1f1f1;
+          }
+
+          * { box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 1rem;
+            background-color: var(--bg-body);
+            color: var(--text);
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+          }
+          h1 { margin: 0; font-size: 1.75rem; }
+          
+          /* Header Layout */
+          header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+          }
+          
+          /* Forms */
+          label { display: block; margin-bottom: 0.5rem; font-weight: 600; font-size: 0.95rem; }
+          input[type="text"], select, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            font-family: inherit;
+            background-color: var(--bg-input);
+            color: var(--text);
+          }
+          textarea {
+            min-height: 200px;
+            font-family: monospace;
+            resize: vertical;
+          }
+          
+          /* Buttons */
+          button { 
+            padding: 0.75rem 1.25rem; 
+            cursor: pointer; 
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: opacity 0.2s;
+            background-color: var(--border); /* Default btn bg */
+            color: var(--text);
+          }
+          button:hover { opacity: 0.9; }
+          .btn-primary { background-color: var(--primary); color: white; }
+          .btn-danger { background-color: var(--danger); color: white; }
+          
+          /* Layout Components */
+          .card {
+            background: var(--bg-card);
+            padding: 1.25rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+          }
           
           .controls-row {
             display: flex;
@@ -153,14 +170,35 @@ app.get('/', (c) => {
               background: var(--bg-input);
               border-radius: 4px;
               flex-wrap: wrap;
-                                                                '.btn-primary { background-color: var(--primary); color: white; }' +
-                                                                '.btn-danger { background-color: var(--danger); color: white; }' +
-                                                                '.controls-row { display: flex; gap: 10px; flex-wrap: wrap; }' +
-                                                                '.controls-row select { flex: 1; min-width: 250px; margin-bottom: 0; }' +
-                                                                '.controls-row button { flex-shrink: 0; }' +
-                                                                '.log-box { font-family: monospace; font-size: 0.85em; color: var(--text-muted); background: var(--log-bg); padding: 1rem; border-radius: 6px; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; white-space: pre-wrap; }' +
-                                                                '/* Theme Toggle */' +
-                                                                '.theme-toggle { background: none; border: 1px solid var(--border); padding: 0.5rem; border-radius: 50%;' +
+          }
+          .rule-row select, .rule-row input[type="text"] { margin-bottom: 0; width: auto; flex: 1; min-width: 150px; }
+          .rule-actions { display: flex; gap: 8px; align-items: center; }
+          .rule-actions label { margin-bottom: 0; font-weight: normal; font-size: 0.85em; display: flex; align-items: center; gap: 4px; }
+          .rule-delete-btn { background: var(--danger); color: white; padding: 4px 8px; font-size: 0.8em; width: auto; }
+          .add-rule-btn { width: 100%; padding: 8px; border: 1px dashed var(--border); background: none; color: var(--text-muted); }
+          .add-rule-btn:hover { background: var(--border); color: var(--text); }
+        </style>
+        <script>
+            // --- UI LOGIC ---
+            const IS_DEMO = ${isDemo};
+            let ALL_LISTS = [];
+
+            function initTheme() {
+                const stored = localStorage.getItem('theme');
+                if (stored) {
+                    document.documentElement.setAttribute('data-theme', stored);
+                } else {
+                    // Default is Dark (no attribute needed as per :root)
+                }
+                updateThemeIcon();
+            }
+
+            function toggleTheme() {
+                const current = document.documentElement.getAttribute('data-theme');
+                const next = current === 'light' ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                updateThemeIcon();
             }
 
             function updateThemeIcon() {
@@ -203,19 +241,8 @@ app.get('/', (c) => {
                 
                 // Use Folder Name field for list name
                 const name = document.getElementById('folderName').value.trim();
-                                                    '.btn-primary { background-color: var(--primary); color: white; }' +
-                                                    '.btn-danger { background-color: var(--danger); color: white; }' +
-                                                    '.controls-row { display: flex; gap: 10px; flex-wrap: wrap; }' +
-                                                    '.controls-row select { flex: 1; min-width: 250px; margin-bottom: 0; }' +
-                                                    '.controls-row button { flex-shrink: 0; }' +
-                                                    '.log-box { font-family: monospace; font-size: 0.85em; color: var(--text-muted); background: var(--log-bg); padding: 1rem; border-radius: 6px; border: 1px solid var(--border); max-height: 300px; overflow-y: auto; white-space: pre-wrap; }' +
-                                                    '/* Theme Toggle */' +
-                                                    '.theme-toggle { background: none; border: 1px solid var(--border); padding: 0.5rem; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; }' +
-                                                    '/* Responsive */' +
-                                                    '@media (max-width: 600px) { .controls-row { flex-direction: column; } .controls-row select, .controls-row button { width: 100%; } h1 { font-size: 1.5rem; } body { padding: 0.75rem; } }' +
-                                                    '/* Basic Mode Builder */' +
-                                                    '.builder-mode-hidden { display: none; }' +
-                                                    '.builder-section { margin-bottom: 2rem; ' +
+                
+                if(!name) {
                     alert("Please enter a Folder Name to save this list.");
                     return;
                 }
