@@ -870,35 +870,24 @@ function getActionBody(suffix, ruleName) {
             // Reject usually stops everything else
             return `reject "Message Rejected";\n  stop;`;
         }
-        
-        if (archive) {
-            s += `fileinto "Archive";\n  `;
-        }
-        
-        // File into Target (Rule Name) or Label
-        // If explicit F is set, or if Label is set (implicitly filing into label)
-        // Adjust logic: if Label is present, we file there. 
-        // If F is present and NO label, we file to ruleName.
-        // If F is present AND label is present, we file to label (treating label as override).
-        // If NEITHER F nor Label is present... check defaults? 
-        // (canonicalSuffix default returns 'default' which maps to 'auto:F' usually? 
-        // No, 'default' string is handled in legacy block below? 
-        // Ah, canonicalSuffix returns 'default' literal if empty.
-        // And getActionBody checks `startsWith('auto:')`.
-        // If I return 'default', it falls through to legacy `return fileinto ruleName`.
-        // Valid.)
-        
-        if (fileIntoTarget || fileIntoLabel) {
-             const target = fileIntoLabel || ruleName;
-             s += `fileinto "${target}";\n  `;
-        }
-        
+
+        // Action Metadata (Flags, Expiration) must be set BEFORE fileinto
         if (markRead) {
             s += `addflag "\\\\Seen";\n  `;
         }
         
         if (expire) {
             s += `expire "${expire.unit}" "${expire.val}";\n  `;
+        }
+        
+        if (archive) {
+            s += `fileinto "Archive";\n  `;
+        }
+        
+        // File into Target (Rule Name) or Label
+        if (fileIntoTarget || fileIntoLabel) {
+             const target = fileIntoLabel || ruleName;
+             s += `fileinto "${target}";\n  `;
         }
         
         if (stop) {
