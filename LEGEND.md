@@ -16,7 +16,7 @@ Determines *what part* of the email header to check.
 - **(No Prefix)**: Check the **Subject** header.
 - **`^sender@example.com^`**: (Preferred) Check the **From** header using an inline token. Place the `^...^` token anywhere in the rule line; remaining text is treated as the Subject filter. Example: `^sender@example.com^ FR Subject Text`.
 
-> Deprecated: the older `from:` prefix is supported for backward compatibility but will be removed in a future release. Prefer the `^...^` syntax.
+
 
 ### 3. ACTION (Required)
 A combination of characters that determine what happens when the pattern matches.
@@ -27,7 +27,7 @@ A combination of characters that determine what happens when the pattern matches
 | `R` | **Read** | Marks the email as seen (`\Seen`). |
 | `A` | **Archive** | Moves email to the `Archive` folder (and the Rule folder). |
 | `S` | **Stop** | Stops processing further Sieve scripts. |
-| `D` | **Designated (deprecated)** | Legacy: moved email to a specific destination. Use `&label&` instead. |
+| `D` | **Designated** | Legacy: moved email to a specific destination. Use `&label&` instead. |
 | `B` | **Bounce** | Rejects the message with an error. |
 | `x[N][u]` | **Expire** | Sets expiration. `x1`=1 day. `x6h`=6 hours. `x30d`=30 days. |
 
@@ -43,14 +43,14 @@ A combination of characters that determine what happens when the pattern matches
 *   `B`: Reject / Bounce
 *   `Fx...`: Expire + FileInto (e.g. `Fx1`, `Fx12h`)
 
-**From Rules:**
-*   `from:F`: FileInto - *Moves email.*
-*   `from:FR`: Read + FileInto - *Moves email and marks as Read.*
-*   `from:FRS`: Read + FileInto + Stop - *Moves, marks Read, and Stops.*
-*   `from:FRA`: Read + FileInto + Archive - *Continues processing.*
-*   `from:FRAS`: Read + FileInto + Archive + Stop
-*   `from:Fx...`: Expire + FileInto
-*   `from:B`: Reject / Bounce)
+**From / Address Rules:**
+*   `^sender@example.com^ F`: FileInto - Moves email.
+*   `^sender@example.com^ FR`: Read + FileInto - Moves email and marks as Read.
+*   `^sender@example.com^ FRS`: Read + FileInto + Stop - Moves, marks Read, and Stops.
+*   `^sender@example.com^ FRA`: Read + FileInto + Archive - Continues processing.
+*   `^sender@example.com^ FRAS`: Read + FileInto + Archive + Stop
+*   `^sender@example.com^ Fx...`: Expire + FileInto
+*   `^sender@example.com^ B`: Reject / Bounce
 
 ### 4. PATTERN (Required)
 The text to match against the header.
@@ -76,7 +76,7 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 
 - **Behavior**: The parser extracts the `&labelName&` token and the rule will `fileinto "labelName"` (and still honor flags like `F R A S` and expiry `x1d`).
 
-> Deprecated: `FRASD label` and the `D` flag are supported for backward compatibility but will be removed in a future release. Prefer `&label&`.
+> Use `&label&` in rule lines to designate a custom label; legacy `FRASD label` may still appear in older configs.
 
 ## Examples
 
@@ -86,10 +86,10 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 | `FR Daily Digest` | **Global Subject**. Moves to folder, marks as **Read**. Stops. |
 | `FRAS Security Alert` | **Global Subject**. Moves to folder, marks **Read**, copies to **Archive**. Stops. |
 | `B Buy Now` | **Global Subject**. **Rejects/Bounces** the email. |
-| `^sender@example.com^ FR Subject` | **Global From (preferred)**. Matches sender and subject. |
-| `from:FRS info@example.com` | **Global From (deprecated)**. Moves to folder if sender matches. Marks Read. Stops. |
+| `^sender@example.com^ FR Subject` | **Global From**. Matches sender and subject. |
+| `^info@example.com^ FRS` | **Global From**. Moves to folder if sender matches. Marks Read. Stops. |
 | `!F Local Only` | **Scoped Subject**. Moves to folder ONLY if sent specifically to this mailbox. |
-| `!from:FRAS bad-actor@spam` | **Scoped From**. Read/Archive/Stop ONLY if sent to this mailbox. |
+| `!^bad-actor@spam^ FRAS` | **Scoped From**. Read/Archive/Stop ONLY if sent to this mailbox. |
 | `!B malicious-user` | **Scoped Subject**. **Rejects** if subject contains text, ONLY for this mailbox. |
 | `Fx1 Temporary Code` | **Global Subject**. Moves to folder, sets **Expire in 1 day**. |
 | `Fx4h One Time Pass` | **Global Subject**. Moves to folder, sets **Expire in 4 hours**. |
