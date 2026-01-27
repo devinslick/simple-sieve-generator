@@ -432,31 +432,35 @@ app.get('/', (c) => {
             function helperParseDSL(token) {
                 // Matches parseDSL in backend
                 if (!token) return null;
-                let temp = token.trim();
+                let temp = token.trim().toUpperCase();
                 if (!temp) return null;
                 let label = null;
                 let expire = null;
-                
-                const labelMatch = temp.match(/!([\w-]+)!/);
+
+                const labelMatch = temp.match(/!([\w-]+)!/i);
                 if (labelMatch) {
                     label = labelMatch[1];
                     temp = temp.replace(labelMatch[0], '');
                 }
-                const expireMatch = temp.match(/x(\d+)([dh]?)/i);
+                const expireMatch = temp.match(/X(\d+)([DH]?)/);
                 if (expireMatch) {
-                    expire = 'x' + expireMatch[1] + expireMatch[2];
+                    expire = 'x' + expireMatch[1] + expireMatch[2].toLowerCase();
                     temp = temp.replace(expireMatch[0], '');
                 }
-                
-                if (temp.length > 0 && !/^[frasbd]+$/i.test(temp)) return null;
+
+                // Check if remaining chars are only valid flag characters
+                const validFlags = 'FRASBD';
+                for (let i = 0; i < temp.length; i++) {
+                    if (validFlags.indexOf(temp[i]) === -1) return null;
+                }
                 
                 return {
-                    F: /f/i.test(temp),
-                    R: /r/i.test(temp),
-                    A: /a/i.test(temp),
-                    S: /s/i.test(temp),
-                    B: /b/i.test(temp),
-                    D: /d/i.test(temp),
+                    F: temp.indexOf('F') >= 0,
+                    R: temp.indexOf('R') >= 0,
+                    A: temp.indexOf('A') >= 0,
+                    S: temp.indexOf('S') >= 0,
+                    B: temp.indexOf('B') >= 0,
+                    D: temp.indexOf('D') >= 0,
                     label: label,
                     expire: expire,
                     hasFlags: (temp.length > 0 || label !== null || expire !== null)
