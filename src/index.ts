@@ -677,7 +677,9 @@ app.get('/', (c) => {
                 };
                 addCheck('File', 'F');
                 addCheck('Read', 'R');
+                addCheck('Archive', 'A');
                 addCheck('Stop', 'S');
+                addCheck('Block', 'B');
                 addCheck('Designate', 'D');
                 row.appendChild(actions);
                 // Match/Label input
@@ -724,7 +726,7 @@ app.get('/', (c) => {
                     BUILDER_STATE[scopeName].push({
                         type: 'subject',
                         match: '',
-                        flags: { F: true, R: false, A: false, S: false, B: false } // Default
+                        flags: { F: true, R: false, A: false, S: false, B: false, D: false, label: null }
                     });
                     renderBuilder();
                     updateFromBuilder();
@@ -779,10 +781,25 @@ app.get('/', (c) => {
                  
                  addCheck('File', 'F');
                  addCheck('Read', 'R');
+                 addCheck('Archive', 'A');
                  addCheck('Stop', 'S');
-                 
+                 addCheck('Block', 'B');
+                 addCheck('Designate', 'D');
+
                  row.appendChild(actions);
-                 
+
+                 // Label input (for Designate)
+                 const labelInput = document.createElement('input');
+                 labelInput.type = 'text';
+                 labelInput.placeholder = 'Custom Label';
+                 labelInput.value = data.flags.label || '';
+                 labelInput.style.width = '120px';
+                 labelInput.oninput = (e) => {
+                     data.flags.label = e.target.value;
+                     updateFromBuilder();
+                 };
+                 row.appendChild(labelInput);
+
                  // Delete
                  const del = document.createElement('button');
                  del.className = 'rule-delete-btn';
