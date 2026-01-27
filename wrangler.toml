@@ -19,9 +19,12 @@ crons = []
 # Preview Environment (for non-main branch deployments)
 [env.preview]
 name = "simple-sieve-generator-preview"
+[env.preview.vars]
+# Empty vars section to satisfy wrangler validation
 [[env.preview.kv_namespaces]]
 binding = "SIEVE_DATA"
 id = "SIEVE_DATA_PREVIEW_ID"
+preview_id = "SIEVE_DATA_PREVIEW_ID"
 
 # Demo Environment
 [env.demo]
