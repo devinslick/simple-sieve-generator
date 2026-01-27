@@ -16,6 +16,13 @@ preview_id = "SIEVE_DATA_PREVIEW_ID"
 [triggers]
 crons = []
 
+# Preview Environment (for non-main branch deployments)
+[env.preview]
+name = "simple-sieve-generator-preview"
+[[env.preview.kv_namespaces]]
+binding = "SIEVE_DATA"
+id = "SIEVE_DATA_PREVIEW_ID"
+
 # Demo Environment
 [env.demo]
 name = "simple-sieve-generator-demo"
