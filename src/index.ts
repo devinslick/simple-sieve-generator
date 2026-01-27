@@ -987,11 +987,8 @@ function parseRulesList(rawText) {
         }
 
         let type = 'subject';
-        // If a ^...^ token was present, treat this as a From rule
-        if (fromToken) {
-            type = 'from';
-        } else if (currentLine.toLowerCase().startsWith('from:')) {
-            // Legacy 'from:' supported only when no ^...^ token is provided
+        // Legacy 'from:' supported only when no ^...^ token is provided
+        if (!fromToken && currentLine.toLowerCase().startsWith('from:')) {
             type = 'from';
             currentLine = currentLine.substring(5).trim();
         }
