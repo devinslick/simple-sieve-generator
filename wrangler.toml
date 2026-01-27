@@ -3,28 +3,17 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 # KV Namespace definitions
-# Note: IDs are injected via CI/CD
+# Note: ID is injected via CI/CD
 [[kv_namespaces]]
 binding = "SIEVE_DATA"
 id = "SIEVE_DATA_ID"
-preview_id = "SIEVE_DATA_PREVIEW_ID"
 
 [vars]
-# Environment variables
+# Environment variables (BRANCH is set dynamically during deployment)
 
 # Deployment
 [triggers]
 crons = []
-
-# Preview Environment (for non-main branch deployments)
-[env.preview]
-name = "simple-sieve-generator-preview"
-[env.preview.vars]
-# Empty vars section to satisfy wrangler validation
-[[env.preview.kv_namespaces]]
-binding = "SIEVE_DATA"
-id = "SIEVE_DATA_PREVIEW_ID"
-preview_id = "SIEVE_DATA_PREVIEW_ID"
 
 # Demo Environment
 [env.demo]
