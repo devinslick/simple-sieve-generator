@@ -934,7 +934,13 @@ function parseRulesList(rawText) {
              
              // If we have remaining args, treat them as a Subject Match (Filter)
              // But only if they aren't empty
-             if (matchArgs && matchArgs.length > 0) {
+            // If matchArgs is identical to the extracted label token (e.g. user wrote &${2}& and left `${2}`),
+            // treat it as empty — it was intended as the label, not a subject filter.
+            if (labelToken && matchArgs === labelToken) {
+                matchArgs = '';
+            }
+
+            if (matchArgs && matchArgs.length > 0) {
                  // Group by (Suffix + Alias-Set) to allow combining multiple filters for same alias
                  const aliasKey = aliases.sort().join(',');
                  // Append extras (from/label) encoded into key so generator can include additional conditions
