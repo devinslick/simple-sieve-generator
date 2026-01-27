@@ -390,11 +390,11 @@ app.get('/', (c) => {
                 if (mode === 'basic') {
                     addRuleForm.classList.remove('builder-mode-hidden');
                     legendLink.style.display = 'none';
-                    toggle.innerText = 'Switch to Advanced (Text)';
+                    toggle.innerText = 'Hide rule entry form';
                 } else {
                     addRuleForm.classList.add('builder-mode-hidden');
                     legendLink.style.display = 'inline';
-                    toggle.innerText = 'Switch to Basic (Add Rule)';
+                    toggle.innerText = 'Show rule entry form';
                 }
             }
 
@@ -431,7 +431,7 @@ app.get('/', (c) => {
                 if (ruleType === 'alias') {
                     const aliases = document.getElementById('newRuleAliases').value.trim();
                     if (!aliases) {
-                        alert('Please enter alias(es)');
+                        alert('Please enter destination mailbox(es)');
                         return;
                     }
                     ruleLine = '!' + aliases + '!' + flags;
@@ -460,6 +460,7 @@ app.get('/', (c) => {
                 document.getElementById('flagB').checked = false;
                 document.getElementById('flagD').checked = false;
                 updateRuleTypeFields();
+                toggleLabelField();
             }
 
             function updateRuleTypeFields() {
@@ -474,6 +475,12 @@ app.get('/', (c) => {
                     aliasField.style.display = 'none';
                     matchLabel.innerText = ruleType === 'from' ? 'Email/Domain:' : 'Subject Text:';
                 }
+            }
+
+            function toggleLabelField() {
+                const labelField = document.getElementById('labelFieldWrapper');
+                const isDesignateChecked = document.getElementById('flagD').checked;
+                labelField.style.display = isDesignateChecked ? 'block' : 'none';
             }
         </script>
       </head>
@@ -508,7 +515,7 @@ app.get('/', (c) => {
           <label for="rulesInput">
               Rules List:
               <a id="legendLink" href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a>
-              <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Switch to Basic (Add Rule)</button>
+              <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Show rule entry form</button>
           </label>
           <textarea id="rulesInput" placeholder="Subject Rule F&#10;from:sender@example.com FR&#10;!alias1,alias2!F"></textarea>
 
@@ -520,12 +527,12 @@ app.get('/', (c) => {
               <select id="newRuleType" onchange="updateRuleTypeFields()" style="width: 100%;">
                 <option value="subject">Subject Match</option>
                 <option value="from">From/Sender Match</option>
-                <option value="alias">Alias Rule</option>
+                <option value="alias">Destination Mailbox Rule</option>
               </select>
             </div>
 
             <div id="aliasFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
-              <label>Alias(es) (comma-separated):</label>
+              <label>Destination Mailbox(es) (comma-separated):</label>
               <input type="text" id="newRuleAliases" placeholder="alias1, alias2" style="width: 100%;">
             </div>
 
@@ -542,13 +549,13 @@ app.get('/', (c) => {
                 <label><input type="checkbox" id="flagA"> Archive</label>
                 <label><input type="checkbox" id="flagS"> Stop</label>
                 <label><input type="checkbox" id="flagB"> Block</label>
-                <label><input type="checkbox" id="flagD"> Designate</label>
+                <label><input type="checkbox" id="flagD" onchange="toggleLabelField()"> Designate</label>
               </div>
             </div>
 
-            <div style="margin-bottom: 0.75rem;">
-              <label>Custom Label (for Designate):</label>
-              <input type="text" id="newRuleLabel" placeholder="Optional label" style="width: 100%;">
+            <div id="labelFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
+              <label>Designated Label:</label>
+              <input type="text" id="newRuleLabel" placeholder="Label name" style="width: 100%;">
             </div>
 
             <button onclick="addRule()" class="btn-primary" style="width: 100%;">Add Rule</button>
