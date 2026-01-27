@@ -90,7 +90,7 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 | `^info@example.com^ FRS` | **Global From**. Moves to folder if sender matches. Marks Read. Stops. |
 | `!F Local Only` | **Scoped Subject**. Moves to folder ONLY if sent specifically to this mailbox. |
 | `!^bad-actor@spam^ FRAS` | **Scoped From**. Read/Archive/Stop ONLY if sent to this mailbox. |
-| `!B malicious-user` | **Scoped Subject**. **Rejects** if subject contains text, ONLY for this mailbox. |
+| `!B junk subject line` | **Scoped Subject**. **Rejects** if subject contains text, ONLY for this mailbox. |
 | `Fx1 Temporary Code` | **Global Subject**. Moves to folder, sets **Expire in 1 day**. |
 | `Fx4h One Time Pass` | **Global Subject**. Moves to folder, sets **Expire in 4 hours**. |
 | `F *Verification*` | **Global Subject**. Uses `:matches` because of wildcards. |
