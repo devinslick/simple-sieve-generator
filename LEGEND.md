@@ -76,7 +76,7 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 
 - **Behavior**: The parser extracts the `&labelName&` token and the rule will `fileinto "labelName"` (and still honor flags like `F R A S` and expiry `x1d`).
 
-> Use `&label&` in rule lines to designate a custom label; legacy `FRASD label` may still appear in older configs.
+> Use `&label&` in rule lines to designate a custom label. Legacy `FRASD`/`D` support has been removed.
 
 ## Examples
 
