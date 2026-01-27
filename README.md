@@ -90,4 +90,4 @@ The `wrangler.toml` includes a `[env.demo]` section which sets the `DEMO_MODE` e
 5. **Sync**: Files under `examples/lists` are auto-uploaded on deploy.
 
 ### Screenshots
-![Screenshot of UI](screenshots/deal.png)
+![Screenshot of UI](screenshots/example.png)
