@@ -432,7 +432,8 @@ app.get('/', (c) => {
             function helperParseDSL(token) {
                 // Matches parseDSL in backend
                 if (!token) return null;
-                let temp = token;
+                let temp = token.trim();
+                if (!temp) return null;
                 let label = null;
                 let expire = null;
                 
@@ -490,8 +491,8 @@ app.get('/', (c) => {
                         const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
                         const rest = aliasMatch[2].trim();
                         // Parse code/flags and match/label
-                        const parts = rest.split(/\s+/);
-                        const first = parts[0];
+                        const parts = rest.split(/\s+/).filter(p => p.length > 0);
+                        const first = parts[0] || '';
                         const last = parts.length > 0 ? parts[parts.length - 1] : '';
                         let dsl = helperParseDSL(first);
                         let match = rest.substring(first.length).trim();
@@ -500,7 +501,7 @@ app.get('/', (c) => {
                             if (dsl && dsl.hasFlags) {
                                 match = rest.substring(0, rest.length - last.length).trim();
                             } else {
-                                dsl = { F: true };
+                                dsl = { F: true, R: false, A: false, S: false, B: false, D: false };
                             }
                         }
                         // If D flag and match present, treat as label
@@ -522,19 +523,22 @@ app.get('/', (c) => {
                         cleanLine = cleanLine.substring(5).trim();
                     }
                     // Parse Code/Match
-                    const parts = cleanLine.split(/\s+/);
-                    const first = parts[0];
+                    const parts = cleanLine.split(/\s+/).filter(p => p.length > 0);
+                    const first = parts[0] || '';
                     const last = parts.length > 0 ? parts[parts.length - 1] : '';
                     let dsl = helperParseDSL(last);
                     let match = cleanLine;
                     if (dsl && dsl.hasFlags) {
+                        // Code is at the end: "match CODE"
                         match = cleanLine.substring(0, cleanLine.length - last.length).trim();
                     } else {
                         dsl = helperParseDSL(first);
                         if (dsl && dsl.hasFlags) {
+                            // Code is at the beginning: "CODE match"
                             match = cleanLine.substring(first.length).trim();
                         } else {
-                            dsl = { F: true };
+                            // No valid code found, default to File
+                            dsl = { F: true, R: false, A: false, S: false, B: false, D: false };
                         }
                     }
                     if (match.includes('!')) {
