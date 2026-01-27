@@ -352,9 +352,9 @@ app.get('/', (c) => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ folderName, rulesInput })
                     });
-                    
+            
                     if (!response.ok) throw new Error(await response.text());
-                    
+            
                     const data = await response.json();
                     document.getElementById('genOutput').value = data.script;
                     document.getElementById('genLogs').innerText = 'Generation successful!';
@@ -1046,6 +1046,31 @@ function generateSieveScript(folderName, buckets) {
         return { contains, matches };
     };
 
+    const parseExtras = (extraParts) => {
+        const extras = {};
+        for (const e of extraParts) {
+            const [k, v] = e.split('=');
+            if (k && v) extras[k] = decodeURIComponent(v);
+        }
+        return extras;
+    };
+
+    const buildFromConditions = (patterns) => {
+        const fm = splitMatches(patterns);
+        const conditions = [];
+        if (fm.contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+        if (fm.matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+        if (fm.contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+        if (fm.matches.length) {
+            const headerMatches = fm.matches.map(m => {
+                const clean = m.substring(1, m.length - 1);
+                return `"*${clean}*"`;
+            });
+            conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+        }
+        return conditions;
+    };
+
     // --- ALIASES ---
     // 1. Filtered Aliases (Specific rules first)
     const aliasFilteredKeys = Object.keys(buckets).filter(k => k.startsWith('aliases-filtered:'));
@@ -1212,38 +1237,47 @@ function generateSieveScript(folderName, buckets) {
             const part = key.substring('global-from-'.length);
             const [mainPart, ...extraParts] = part.split('::');
             const suffix = mainPart;
-            const extras = {};
-            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
+            const extras = parseExtras(extraParts);
             const items = buckets[key];
 
-            // If no explicit items but extras.from present, we'll build from-patterns from extras.from
-            let fromPatterns = [];
-            if (items && items.length) fromPatterns = items;
-            else if (extras.from) fromPatterns = [extras.from];
+            // Case: both a Subject (items) and an extras.from -> require both Subject AND From
+            // But skip this if items are actually the same single from-token (from-only rule)
+            if (extras.from && items && items.length && !(items.length === 1 && items[0] === extras.from)) {
+                const { contains, matches } = splitMatches(items);
+                const subjectConds = [];
+                if (contains.length) subjectConds.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
+                if (matches.length) subjectConds.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
+                if (subjectConds.length === 0) continue;
 
-            if (!fromPatterns.length) continue;
+                const fromConds = buildFromConditions([extras.from]);
+                if (fromConds.length === 0) continue;
 
-            const fm = splitMatches(fromPatterns);
-            const conditions = [];
-
-            // 1. Check standard "From" header using address test
-            if (fm.contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
-            if (fm.matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
-
-            // 2. Check "X-Simplelogin-Original-From" as a text header
-            if (fm.contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
-            if (fm.matches.length) {
-                const headerMatches = fm.matches.map(m => {
-                    const clean = m.substring(1, m.length - 1); // remove quotes
-                    return `"*${clean}*"`;
-                });
-                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                const subjectBlock = subjectConds.length > 1 ? `anyof (\n  ${subjectConds.join(',\n  ')}\n)` : subjectConds[0];
+                const fromBlock = fromConds.length > 1 ? `anyof (\n  ${fromConds.join(',\n  ')}\n)` : fromConds[0];
+                let body = getActionBody(suffix, ruleName);
+                script += `# Global | From+Subject | ${suffix}\n`;
+                script += `if allof (\n  ${subjectBlock},\n  ${fromBlock}\n) {\n  ${body}\n}\n\n`;
+                continue;
             }
 
-            if (conditions.length === 0) continue;
-            let body = getActionBody(suffix, ruleName);
-            script += `# Global | From | ${suffix}\n`;
-            script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
+            // Case: items represent from patterns
+            if (items && items.length) {
+                const conditions = buildFromConditions(items);
+                if (conditions.length === 0) continue;
+                let body = getActionBody(suffix, ruleName);
+                script += `# Global | From | ${suffix}\n`;
+                script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
+                continue;
+            }
+
+            // Case: fallback to extras.from alone
+            if (extras.from) {
+                const fromConds = buildFromConditions([extras.from]);
+                if (fromConds.length === 0) continue;
+                let body = getActionBody(suffix, ruleName);
+                script += `# Global | From | ${suffix}\n`;
+                script += `if anyof (\n  ${fromConds.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
+            }
         }
     }
     
@@ -1299,38 +1333,54 @@ function generateSieveScript(folderName, buckets) {
             const part = key.substring('scoped-from-'.length);
             const [mainPart, ...extraParts] = part.split('::');
             const suffix = mainPart;
-            const extras = {};
-            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
+            const extras = parseExtras(extraParts);
             const items = buckets[key];
 
-            // Build fromPatterns either from items or from extras.from
-            let fromPatterns = [];
-            if (items && items.length) fromPatterns = items;
-            else if (extras.from) fromPatterns = [extras.from];
-            if (!fromPatterns.length) continue;
+            // If extras.from exists and items are present, interpret items as Subject -> require both
+            // But skip when items are a single from-token (from-only rule)
+            if (extras.from && items && items.length && !(items.length === 1 && items[0] === extras.from)) {
+                const { contains, matches } = splitMatches(items);
+                const subjectConds = [];
+                if (contains.length) subjectConds.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
+                if (matches.length) subjectConds.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
+                if (subjectConds.length === 0) continue;
 
-            const { contains, matches } = splitMatches(fromPatterns);
-            const conditions = [];
+                const fromConds = buildFromConditions([extras.from]);
+                if (fromConds.length === 0) continue;
 
-            // 1. Check standard "From" header using address test
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
-            
-            // 2. Check "X-Simplelogin-Original-From" as a text header
-            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
-            if (matches.length) {
-                const headerMatches = matches.map(m => {
-                    const clean = m.substring(1, m.length - 1);
-                    return `"*${clean}*"`;
-                });
-                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                let body = getActionBody(suffix, ruleName);
+                body = body.split('\n').map(l => '  ' + l).join('\n');
+
+                const subjectBlock = subjectConds.length > 1 ? `anyof (\n      ${subjectConds.join(',\n      ')}\n    )` : subjectConds[0];
+                const fromBlock = fromConds.length > 1 ? `anyof (\n      ${fromConds.join(',\n      ')}\n    )` : fromConds[0];
+
+                script += `    # Scoped | From+Subject | ${suffix}\n`;
+                script += `    if allof (\n      ${subjectBlock},\n      ${fromBlock}\n    ) {\n      ${body}\n    }\n\n`;
+                continue;
             }
 
-            let body = getActionBody(suffix, ruleName);
-            body = body.split('\n').map(l => '  ' + l).join('\n');
-            const conditionStr = conditions.join(',\n      ');
-            script += `    # Scoped | From | ${suffix}\n`;
-            script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
+            // items as from patterns
+            if (items && items.length) {
+                const conditions = buildFromConditions(items);
+                if (conditions.length === 0) continue;
+                let body = getActionBody(suffix, ruleName);
+                body = body.split('\n').map(l => '  ' + l).join('\n');
+                const conditionStr = conditions.join(',\n      ');
+                script += `    # Scoped | From | ${suffix}\n`;
+                script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
+                continue;
+            }
+
+            // fallback to extras.from
+            if (extras.from) {
+                const fromConds = buildFromConditions([extras.from]);
+                if (fromConds.length === 0) continue;
+                let body = getActionBody(suffix, ruleName);
+                body = body.split('\n').map(l => '  ' + l).join('\n');
+                const conditionStr = fromConds.join(',\n      ');
+                script += `    # Scoped | From | ${suffix}\n`;
+                script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
+            }
         }
         script += `}\n`;
     }
