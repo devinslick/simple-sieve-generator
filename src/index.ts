@@ -321,13 +321,21 @@ app.get('/', (c) => {
             async function loadSelectedList() {
                 const name = document.getElementById('savedLists').value;
                 if(!name) return;
-                
+
                 // Update Folder Name input match selected list
                 document.getElementById('folderName').value = name;
-                
+
                 const res = await fetch('/api/lists/' + name);
                 if(res.ok) {
-                    document.getElementById('rulesInput').value = await res.text();
+                    const content = await res.text();
+                    document.getElementById('rulesInput').value = content;
+
+                    // Re-parse builder if in basic mode
+                    const mode = localStorage.getItem('editorMode') || 'advanced';
+                    if (mode === 'basic') {
+                        parseRulesToBuilder(content);
+                        renderBuilder();
+                    }
                 }
             }
 
@@ -447,6 +455,7 @@ app.get('/', (c) => {
                     A: /a/i.test(temp),
                     S: /s/i.test(temp),
                     B: /b/i.test(temp),
+                    D: /d/i.test(temp),
                     label: label,
                     expire: expire,
                     hasFlags: (temp.length > 0 || label !== null || expire !== null)
