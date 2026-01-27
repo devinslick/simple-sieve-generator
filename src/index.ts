@@ -430,9 +430,8 @@ app.get('/', (c) => {
                 if (document.getElementById('flagA').checked) flags += 'A';
                 if (document.getElementById('flagS').checked) flags += 'S';
                 if (document.getElementById('flagB').checked) flags += 'B';
-                if (document.getElementById('flagD').checked) flags += 'D';
-
                 const label = document.getElementById('newRuleLabel').value.trim();
+                // Use &label& token for designated label; do not emit legacy 'D' flag.
                 if (label) flags += '!' + label + '!';
 
                 if (!flags) flags = 'F'; // Default to File
@@ -450,7 +449,8 @@ app.get('/', (c) => {
                         ruleLine += ' ' + matchText;
                     }
                 } else if (ruleType === 'from') {
-                    ruleLine = 'from:' + matchText + ' ' + flags;
+                    // Emit preferred ^...^ token for From rules (legacy 'from:' removed)
+                    ruleLine = '^' + matchText + '^ ' + flags;
                 } else {
                     ruleLine = matchText + ' ' + flags;
                 }
@@ -469,9 +469,7 @@ app.get('/', (c) => {
                 document.getElementById('flagA').checked = false;
                 document.getElementById('flagS').checked = false;
                 document.getElementById('flagB').checked = false;
-                document.getElementById('flagD').checked = false;
                 updateRuleTypeFields();
-                toggleLabelField();
             }
 
             function updateRuleTypeFields() {
@@ -488,11 +486,7 @@ app.get('/', (c) => {
                 }
             }
 
-            function toggleLabelField() {
-                const labelField = document.getElementById('labelFieldWrapper');
-                const isDesignateChecked = document.getElementById('flagD').checked;
-                labelField.style.display = isDesignateChecked ? 'block' : 'none';
-            }
+            // Label field is always visible; legacy 'D' checkbox removed.
         </script>
       </head>
       <body>
@@ -546,19 +540,18 @@ app.get('/', (c) => {
                         </div>
 
                         <div style="margin-bottom: 0.75rem;">
-                            <label>Actions:</label>
+                                <label>Actions:</label>
                             <div class="rule-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
                                 <label><input type="checkbox" id="flagF" checked> File</label>
                                 <label><input type="checkbox" id="flagR"> Read</label>
                                 <label><input type="checkbox" id="flagA"> Archive</label>
                                 <label><input type="checkbox" id="flagS"> Stop</label>
                                 <label><input type="checkbox" id="flagB"> Block</label>
-                                <label><input type="checkbox" id="flagD" onchange="toggleLabelField()"> Designate</label>
                             </div>
                         </div>
 
-                        <div id="labelFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
-                            <label>Designated Label:</label>
+                        <div id="labelFieldWrapper" style="display: block; margin-bottom: 0.75rem;">
+                            <label>Designated Label (optional):</label>
                             <input type="text" id="newRuleLabel" placeholder="Label name" style="width: 100%;">
                         </div>
 
@@ -570,7 +563,7 @@ app.get('/', (c) => {
                             <a id="legendLink" href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a>
                             <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Show rule entry form</button>
                     </label>
-                    <textarea id="rulesInput" placeholder="Subject Rule F&#10;from:sender@example.com FR&#10;!alias1,alias2!F"></textarea>
+                      <textarea id="rulesInput" placeholder="Subject Rule F&#10;^sender@example.com^ FR&#10;!alias1,alias2!F"></textarea>
                 </div>
         
         <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
@@ -709,7 +702,7 @@ app.get('/legend', async (c) => {
             <li><code>!</code> - Start Scoped Section (Applies to emails delivered to <em>Folder Name</em>)</li>
             <li><code>global</code> - Start Global Section (Applies to all emails)</li>
             <li><code>Subject String CODE</code> - Subject Rule</li>
-            <li><code>from:sender CODE</code> - Sender Rule</li>
+            <li><code>^sender@example.com^ CODE</code> - Sender Rule</li>
         </ul>
         <p><strong>Codes:</strong></p>
         <ul>
@@ -764,19 +757,18 @@ function parseDSL(token) {
     // User syntax "FRASD label" is separate. "FSD label" is separate.
     // If token is "FSD", it is solely F,S,D flags.
     
-    // Verify remaining characters are only flags [F, R, A, S, B, D]
-    // Allowing case-insensitive
-    if (temp.length > 0 && !/^[frasbd]+$/i.test(temp)) {
+    // Verify remaining characters are only flags [F, R, A, S, B]
+    // (Legacy `D` flag removed; use &label& token instead.)
+    if (temp.length > 0 && !/^[frasb]+$/i.test(temp)) {
         return null; // Contains invalid chars
     }
-    
+
     const flags = {
         F: /f/i.test(temp),
         R: /r/i.test(temp),
         A: /a/i.test(temp),
         S: /s/i.test(temp),
-        B: /b/i.test(temp),
-        D: /d/i.test(temp)
+        B: /b/i.test(temp)
     };
     
     // Legacy support: "F" implies File. "B" implies Reject.
@@ -987,11 +979,7 @@ function parseRulesList(rawText) {
         }
 
         let type = 'subject';
-        // Legacy 'from:' supported only when no ^...^ token is provided
-        if (!fromToken && currentLine.toLowerCase().startsWith('from:')) {
-            type = 'from';
-            currentLine = currentLine.substring(5).trim();
-        }
+        if (fromToken) type = 'from';
 
         // Parse Code from Rule Line
         // "Subject String CODE" or "CODE Subject String"
@@ -1022,9 +1010,15 @@ function parseRulesList(rawText) {
         const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
         if (!buckets[key]) buckets[key] = [];
         const item = matchString.trim();
-        
+
         if (item) {
             buckets[key].push(item);
+        } else {
+            // If this is a from-type rule with no subject, register the fromToken
+            // as the bucket item so the generator will create From-only tests.
+            if (type === 'from' && fromToken) {
+                buckets[key].push(fromToken);
+            }
         }
     }
     
