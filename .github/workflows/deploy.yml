@@ -19,10 +19,9 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Inject KV Namespace IDs
+      - name: Inject KV Namespace ID
         run: |
           sed -i "s/SIEVE_DATA_ID/${{ secrets.SIEVE_DATA_ID }}/g" wrangler.toml
-          sed -i "s/SIEVE_DATA_PREVIEW_ID/${{ secrets.SIEVE_DATA_PREVIEW_ID }}/g" wrangler.toml
 
       - name: Deploy to Cloudflare Workers
         env:
@@ -30,13 +29,14 @@ jobs:
           BRANCH: ${{ github.ref_name }}
         run: |
           if [ "$BRANCH" = "main" ]; then
-            echo "Deploying to production"
+            echo "Deploying to production (no branch prefix)"
             npx wrangler deploy
           else
             SAFE_BRANCH=$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
             WORKER_NAME="simple-sieve-generator-${SAFE_BRANCH}"
-            echo "Deploying to preview: $WORKER_NAME"
-            npx wrangler deploy --env preview --name "$WORKER_NAME"
+            echo "Deploying branch '$SAFE_BRANCH' to worker: $WORKER_NAME"
+            echo "Data will be prefixed with 'branch:${SAFE_BRANCH}:' in KV store"
+            npx wrangler deploy --name "$WORKER_NAME" --var "BRANCH:$SAFE_BRANCH"
           fi
 
       - name: Deploy Demo Mode

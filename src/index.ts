@@ -3,9 +3,18 @@ import { Hono } from 'hono';
 type Bindings = {
   SIEVE_DATA: KVNamespace
   DEMO_MODE?: string
+  BRANCH?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+// Helper to get key prefix based on branch
+// Main branch (or unset) uses no prefix for backwards compatibility
+function getKeyPrefix(env: Bindings): string {
+  const branch = env.BRANCH;
+  if (!branch || branch === 'main') return '';
+  return `branch:${branch}:`;
+}
 
 app.get('/', (c) => {
   const isDemo = c.env.DEMO_MODE === 'true';
@@ -580,19 +589,21 @@ app.get('/', (c) => {
 
 // --- API ROUTES FOR SAVE/LOAD ---
 
-const ORDER_KEY = 'config:list_order';
-
-async function getListOrder(env) {
-    const raw = await env.SIEVE_DATA.get(ORDER_KEY);
+async function getListOrder(env: Bindings) {
+    const prefix = getKeyPrefix(env);
+    const orderKey = prefix + 'config:list_order';
+    const raw = await env.SIEVE_DATA.get(orderKey);
     try {
         return raw ? JSON.parse(raw) : [];
     } catch { return []; }
 }
 
-async function saveListOrder(env, order) {
+async function saveListOrder(env: Bindings, order: string[]) {
+    const prefix = getKeyPrefix(env);
+    const orderKey = prefix + 'config:list_order';
     // Deduplicate and filter empty
     const unique = [...new Set(order)].filter(x => x);
-    await env.SIEVE_DATA.put(ORDER_KEY, JSON.stringify(unique));
+    await env.SIEVE_DATA.put(orderKey, JSON.stringify(unique));
 }
 
 app.get('/api/lists', async (c) => {
@@ -600,24 +611,26 @@ app.get('/api/lists', async (c) => {
         return c.json([]);
     }
     try {
-        const list = await c.env.SIEVE_DATA.list({ prefix: 'list:' });
-        const allNames = list.keys.map(k => k.name.substring(5)); // remove 'list:' prefix
-        
+        const prefix = getKeyPrefix(c.env);
+        const listPrefix = prefix + 'list:';
+        const list = await c.env.SIEVE_DATA.list({ prefix: listPrefix });
+        const allNames = list.keys.map(k => k.name.substring(listPrefix.length));
+
         // Sort based on stored order
         const order = await getListOrder(c.env);
-        
+
         // Create a Set for robust lookup
         const nameSet = new Set(allNames);
-        
+
         // 1. Add items from 'order' that still exist in 'allNames'
         const sorted = order.filter(n => nameSet.has(n));
-        
+
         // 2. Add remaining items from 'allNames' that weren't in 'order' (append to end)
         const sortedSet = new Set(sorted);
         allNames.forEach(n => {
             if (!sortedSet.has(n)) sorted.push(n);
         });
-        
+
         return c.json(sorted);
     } catch(e) { return c.json([]); }
 });
@@ -629,15 +642,16 @@ app.post('/api/lists/order', async (c) => {
         if (!Array.isArray(newOrder)) return c.json({ error: "Invalid body" }, 400);
         await saveListOrder(c.env, newOrder);
         return c.json({ success: true });
-    } catch(e) { return c.json({ error: e.message }, 500); }
+    } catch(e) { return c.json({ error: (e as Error).message }, 500); }
 });
 
 app.get('/api/lists/:name', async (c) => {
     if (c.env.DEMO_MODE === 'true') {
         return c.notFound();
     }
+    const prefix = getKeyPrefix(c.env);
     const name = c.req.param('name');
-    const val = await c.env.SIEVE_DATA.get('list:' + name);
+    const val = await c.env.SIEVE_DATA.get(prefix + 'list:' + name);
     if(val === null) return c.notFound();
     return c.text(val);
 });
@@ -646,19 +660,20 @@ app.put('/api/lists/:name', async (c) => {
     if (c.env.DEMO_MODE === 'true') {
         return c.json({ error: "Demo Mode: Save disabled" }, 403);
     }
+    const prefix = getKeyPrefix(c.env);
     const name = c.req.param('name');
     const content = await c.req.text();
-    
+
     // update KV
-    await c.env.SIEVE_DATA.put('list:' + name, content);
-    
+    await c.env.SIEVE_DATA.put(prefix + 'list:' + name, content);
+
     // update Order if new
     const order = await getListOrder(c.env);
     if (!order.includes(name)) {
         order.push(name);
         await saveListOrder(c.env, order);
     }
-    
+
     return c.json({ success: true });
 });
 
@@ -667,16 +682,17 @@ app.delete('/api/lists/:name', async (c) => {
     if (c.env.DEMO_MODE === 'true') {
         return c.json({ error: "Demo Mode: Delete disabled" }, 403);
     }
+    const prefix = getKeyPrefix(c.env);
     const name = c.req.param('name');
-    await c.env.SIEVE_DATA.delete('list:' + name);
-    
+    await c.env.SIEVE_DATA.delete(prefix + 'list:' + name);
+
     // Remove from order
     const order = await getListOrder(c.env);
     const newOrder = order.filter(n => n !== name);
     if (newOrder.length !== order.length) {
         await saveListOrder(c.env, newOrder);
     }
-    
+
     return c.json({ success: true });
 });
 
