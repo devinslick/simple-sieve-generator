@@ -826,7 +826,8 @@ function canonicalSuffix(dsl) {
     if (dsl.flags.A) parts.push('A');
     if (dsl.flags.S) parts.push('S');
     if (dsl.flags.B) parts.push('B');
-    if (dsl.flags.D) parts.push('D');
+    // 'D' (designate) is deprecated; labels should be provided via &label& token and
+    // will be encoded as an `L-<label>` part below.
     
     // Expire
     if (dsl.expire) {
@@ -858,12 +859,26 @@ function parseRulesList(rawText) {
         line = line.trim();
         if (!line || line.startsWith('#')) continue;
 
+        // New DSL tokens (preferred): extract ^from^ and &label& tokens anywhere in the line
+        let fromToken = null;
+        let labelToken = null;
+        const fromRe = line.match(/\^([^\^]+)\^/);
+        if (fromRe) {
+            fromToken = fromRe[1].trim();
+            line = line.replace(fromRe[0], '').trim();
+        }
+        const labelRe = line.match(/&([^&]+)&/);
+        if (labelRe) {
+            labelToken = labelRe[1].trim();
+            line = line.replace(labelRe[0], '').trim();
+        }
+
         // Alias Logic
         // Regex to extract alias part first: !alias1,alias2! ... rest
         let aliasMatch = line.match(/^!([^!]+)!(.*)$/);
         if (aliasMatch) {
              const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
-             const rest = aliasMatch[2].trim();
+             let rest = aliasMatch[2].trim();
              
              // Now parse 'rest' for code + args.
              // e.g. "AFx2h remainder" or "remainder AFx2h"
@@ -885,6 +900,16 @@ function parseRulesList(rawText) {
              // If "AFx2h remainder", First is code.
              // If "remainder AFx2h", Last is code.
              
+             // Allow tokens to be placed inside alias rest as well
+             if (!fromToken) {
+                 const f = rest.match(/\^([^\^]+)\^/);
+                 if (f) { fromToken = f[1].trim(); rest = rest.replace(f[0], '').trim(); }
+             }
+             if (!labelToken) {
+                 const l = rest.match(/&([^&]+)&/);
+                 if (l) { labelToken = l[1].trim(); rest = rest.replace(l[0], '').trim(); }
+             }
+
              if (dslFirst && dslFirst.hasFlags) {
                  dsl = dslFirst;
                  matchArgs = rest.substring(first.length).trim();
@@ -892,30 +917,38 @@ function parseRulesList(rawText) {
                  dsl = dslLast;
                  matchArgs = rest.substring(0, rest.length - last.length).trim();
              }
-             
-             // Handle "Designated" Label Logic (Legacy FSD support)
-             if (dsl && dsl.flags.D && !dsl.label && matchArgs) {
-                 // For Designated rules without an explicit inline label (!label!),
-                 // treat the ENTIRE remaining argument string as the Label.
-                 // This supports "FSD New Sender" -> Label="New Sender".
-                 dsl.label = matchArgs;
-                 matchArgs = ''; 
+
+             // If a new &label& token was provided, prefer it as label
+             if (labelToken) {
+                 if (!dsl) {
+                     // No existing DSL flags, produce suffix for label-only
+                     suffix = 'auto:L-' + labelToken;
+                 } else {
+                     dsl.label = dsl.label || labelToken;
+                 }
              }
-             
+
              if (dsl) {
                  suffix = canonicalSuffix(dsl);
-             } 
+             }
              
              // If we have remaining args, treat them as a Subject Match (Filter)
              // But only if they aren't empty
              if (matchArgs && matchArgs.length > 0) {
                  // Group by (Suffix + Alias-Set) to allow combining multiple filters for same alias
                  const aliasKey = aliases.sort().join(',');
-                 const key = `aliases-filtered:${suffix}###${aliasKey}`;
+                 // Append extras (from/label) encoded into key so generator can include additional conditions
+                 let extras = '';
+                 if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
+                 if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
+                 const key = `aliases-filtered:${suffix}###${aliasKey}${extras}`;
                  if (!buckets[key]) buckets[key] = [];
                  buckets[key].push(matchArgs);
              } else {
-                 const key = 'aliases:' + suffix;
+                 let extras = '';
+                 if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
+                 if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
+                 const key = 'aliases:' + suffix + extras;
                  if (!buckets[key]) buckets[key] = [];
                  buckets[key].push(...aliases);
              }
@@ -948,7 +981,8 @@ function parseRulesList(rawText) {
         }
 
         let type = 'subject';
-        if (currentLine.toLowerCase().startsWith('from:')) {
+        // Legacy 'from:' supported only when no ^...^ token is provided
+        if (!fromToken && currentLine.toLowerCase().startsWith('from:')) {
             type = 'from';
             currentLine = currentLine.substring(5).trim();
         }
@@ -975,7 +1009,11 @@ function parseRulesList(rawText) {
              matchString = currentLine.substring(first.length).trim();
         }
         
-        const key = `${currentScope}-${type}-${bucketSuffix}`;
+        // Build key, including any extracted tokens as extras so generator can add corresponding conditions
+        let extras = '';
+        if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
+        if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
+        const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
         if (!buckets[key]) buckets[key] = [];
         const item = matchString.trim();
         
@@ -1016,9 +1054,17 @@ function generateSieveScript(folderName, buckets) {
         script += `# --- ALIAS RULES (FILTERED) ---\n\n`;
         for (const key of aliasFilteredKeys) {
             const part = key.substring('aliases-filtered:'.length);
-            const [suffix, aliasStr] = part.split('###');
+            const [mainPart, ...extraParts] = part.split('::');
+            const [suffix, aliasStr] = mainPart.split('###');
             const aliasList = aliasStr.split(',').map(a => `"${a}"`).join(', ');
             
+            // parse extras
+            const extras = {};
+            for (const e of extraParts) {
+                const [k, v] = e.split('=');
+                if (k && v) extras[k] = decodeURIComponent(v);
+            }
+
             const filters = buckets[key];
             const { contains: subjectContains, matches: subjectMatches } = splitMatches(filters);
             
@@ -1029,12 +1075,33 @@ function generateSieveScript(folderName, buckets) {
             if (subjectConditions.length === 0) continue; 
             const subjectBlock = subjectConditions.length > 1 ? `anyof (\n    ${subjectConditions.join(',\n    ')}\n  )` : subjectConditions[0];
 
+            // Build additional 'from' conditions if provided via extras
+            const extraConditions = [];
+            if (extras.from) {
+                const fromPatterns = [extras.from];
+                const fm = splitMatches(fromPatterns);
+                if (fm.contains.length) extraConditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) extraConditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+                if (fm.contains.length) extraConditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) {
+                    const headerMatches = fm.matches.map(m => {
+                        const clean = m.substring(1, m.length - 1);
+                        return `"*${clean}*"`;
+                    });
+                    extraConditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                }
+            }
+
             let body = getActionBody(suffix, ruleName);
             
             script += `# Aliases (Filtered) | ${suffix} | ${aliasStr}\n`;
             script += `if allof (\n`;
             script += `  header :comparator "i;unicode-casemap" :contains "X-Original-To" [${aliasList}],\n`;
             script += `  header :contains "Delivered-To" ["@"],\n`;
+            // include extra from conditions first if present
+            if (extraConditions.length) {
+                script += `  ${extraConditions.join(',\n  ')},\n`;
+            }
             script += `  ${subjectBlock}\n`;
             script += `) {\n  ${body}\n}\n\n`;
         }
@@ -1046,23 +1113,54 @@ function generateSieveScript(folderName, buckets) {
     if (aliasKeys.length > 0) {
         script += `# --- ALIAS RULES (GENERIC) ---\n\n`;
         for (const key of aliasKeys) {
-            const suffix = key.substring('aliases:'.length);
+            const part = key.substring('aliases:'.length);
+            const [mainPart, ...extraParts] = part.split('::');
+            const suffix = mainPart;
             const items = buckets[key];
             if (!items.length) continue;
-            
+
+            // parse extras
+            const extras = {};
+            for (const e of extraParts) {
+                const [k, v] = e.split('=');
+                if (k && v) extras[k] = decodeURIComponent(v);
+            }
+
             const { contains, matches } = splitMatches(items);
             const conditions = [];
             if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Original-To" [${contains.join(', ')}]`);
             if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Original-To" [${matches.join(', ')}]`);
-            
+
             if (conditions.length === 0) continue;
-            
+
             const matchBlock = conditions.length > 1 ? `anyof (\n    ${conditions.join(',\n    ')}\n  )` : conditions[0];
-            
+
+            // Build additional 'from' conditions if provided via extras
+            const extraConditions = [];
+            if (extras.from) {
+                const fromPatterns = [extras.from];
+                const fm = splitMatches(fromPatterns);
+                if (fm.contains.length) extraConditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) extraConditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+                if (fm.contains.length) extraConditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) {
+                    const headerMatches = fm.matches.map(m => {
+                        const clean = m.substring(1, m.length - 1);
+                        return `"*${clean}*"`;
+                    });
+                    extraConditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                }
+            }
+
             let body = getActionBody(suffix, ruleName);
-            
+
             script += `# Aliases | ${suffix}\n`;
-            script += `if allof (\n  ${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  ${body}\n}\n\n`;
+            script += `if allof (\n`;
+            // include extra from conditions first if present
+            if (extraConditions.length) {
+                script += `  ${extraConditions.join(',\n  ')},\n`;
+            }
+            script += `  ${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  ${body}\n}\n\n`;
         }
     }
     
@@ -1073,7 +1171,13 @@ function generateSieveScript(folderName, buckets) {
     if (globalSubjectKeys.length || globalFromKeys.length) {
         script += `# --- GLOBAL RULES ---\n\n`;
         for (const key of globalSubjectKeys) {
-            const suffix = key.substring('global-subject-'.length);
+            const part = key.substring('global-subject-'.length);
+            const [mainPart, ...extraParts] = part.split('::');
+            const suffix = mainPart;
+            const extras = {};
+            for (const e of extraParts) {
+                const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v);
+            }
             const items = buckets[key];
             if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
@@ -1081,9 +1185,28 @@ function generateSieveScript(folderName, buckets) {
             if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
             if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
             if (conditions.length === 0) continue;
+
+            // If extras.from present, require both subject AND from conditions
             let body = getActionBody(suffix, ruleName);
             script += `# Global | Subject | ${suffix}\n`;
-            script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
+            if (extras.from) {
+                const fromPatterns = [extras.from];
+                const fm = splitMatches(fromPatterns);
+                const fromConds = [];
+                if (fm.contains.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+                if (fm.contains.length) fromConds.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) {
+                    const headerMatches = fm.matches.map(m => { const clean = m.substring(1, m.length - 1); return `"*${clean}*"`; });
+                    fromConds.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                }
+                if (fromConds.length === 0) continue;
+                const subjectBlock = conditions.length > 1 ? `anyof (\n  ${conditions.join(',\n  ')}\n)` : conditions[0];
+                const fromBlock = fromConds.length > 1 ? `anyof (\n  ${fromConds.join(',\n  ')}\n)` : fromConds[0];
+                script += `if allof (\n  ${subjectBlock},\n  ${fromBlock}\n) {\n  ${body}\n}\n\n`;
+            } else {
+                script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
+            }
         }
         for (const key of globalFromKeys) {
             const suffix = key.substring('global-from-'.length);
@@ -1125,18 +1248,42 @@ function generateSieveScript(folderName, buckets) {
         script += `if header :contains "X-Original-To" "${ruleNameLower}" {\n\n`;
         
         for (const key of scopedSubjectKeys) {
-            const suffix = key.substring('scoped-subject-'.length);
+            const part = key.substring('scoped-subject-'.length);
+            const [mainPart, ...extraParts] = part.split('::');
+            const suffix = mainPart;
+            const extras = {};
+            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
             const items = buckets[key];
             if (!items.length) continue;
              const { contains, matches } = splitMatches(items);
             const conditions = [];
             if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
             if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
+
             let body = getActionBody(suffix, ruleName);
             body = body.split('\n').map(l => '  ' + l).join('\n');
-            const conditionStr = conditions.join(',\n      ');
-            script += `    # Scoped | Subject | ${suffix}\n`;
-            script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
+
+            // If extras.from present, require both subject and from conditions
+            if (extras.from) {
+                const fromPatterns = [extras.from];
+                const fm = splitMatches(fromPatterns);
+                const fromConds = [];
+                if (fm.contains.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+                if (fm.contains.length) fromConds.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+                if (fm.matches.length) {
+                    const headerMatches = fm.matches.map(m => { const clean = m.substring(1, m.length - 1); return `"*${clean}*"`; });
+                    fromConds.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                }
+                const subjectBlock = conditions.join(',\n      ');
+                const fromBlock = fromConds.join(',\n      ');
+                script += `    # Scoped | Subject | ${suffix}\n`;
+                script += `    if allof (\n      anyof (\n      ${subjectBlock}\n      ),\n      anyof (\n      ${fromBlock}\n      )\n    ) {\n      ${body}\n    }\n\n`;
+            } else {
+                const conditionStr = conditions.join(',\n      ');
+                script += `    # Scoped | Subject | ${suffix}\n`;
+                script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
+            }
         }
         
         for (const key of scopedFromKeys) {
