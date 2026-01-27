@@ -987,8 +987,11 @@ function parseRulesList(rawText) {
         }
 
         let type = 'subject';
-        // Legacy 'from:' supported only when no ^...^ token is provided
-        if (!fromToken && currentLine.toLowerCase().startsWith('from:')) {
+        // If a ^...^ token was present, treat this as a From rule
+        if (fromToken) {
+            type = 'from';
+        } else if (currentLine.toLowerCase().startsWith('from:')) {
+            // Legacy 'from:' supported only when no ^...^ token is provided
             type = 'from';
             currentLine = currentLine.substring(5).trim();
         }
@@ -1215,22 +1218,31 @@ function generateSieveScript(folderName, buckets) {
             }
         }
         for (const key of globalFromKeys) {
-            const suffix = key.substring('global-from-'.length);
+            const part = key.substring('global-from-'.length);
+            const [mainPart, ...extraParts] = part.split('::');
+            const suffix = mainPart;
+            const extras = {};
+            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
             const items = buckets[key];
-            if (!items.length) continue;
-            const { contains, matches } = splitMatches(items);
+
+            // If no explicit items but extras.from present, we'll build from-patterns from extras.from
+            let fromPatterns = [];
+            if (items && items.length) fromPatterns = items;
+            else if (extras.from) fromPatterns = [extras.from];
+
+            if (!fromPatterns.length) continue;
+
+            const fm = splitMatches(fromPatterns);
             const conditions = [];
-            
+
             // 1. Check standard "From" header using address test
-            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
-            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
-            
+            if (fm.contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+            if (fm.matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+
             // 2. Check "X-Simplelogin-Original-From" as a text header
-            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
-            if (matches.length) {
-                // For header matching, we need to wrap the pattern in wildcards to match the full header string
-                // e.g. "Name <email>" needs "*email*"
-                const headerMatches = matches.map(m => {
+            if (fm.contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+            if (fm.matches.length) {
+                const headerMatches = fm.matches.map(m => {
                     const clean = m.substring(1, m.length - 1); // remove quotes
                     return `"*${clean}*"`;
                 });
@@ -1293,10 +1305,20 @@ function generateSieveScript(folderName, buckets) {
         }
         
         for (const key of scopedFromKeys) {
-            const suffix = key.substring('scoped-from-'.length);
+            const part = key.substring('scoped-from-'.length);
+            const [mainPart, ...extraParts] = part.split('::');
+            const suffix = mainPart;
+            const extras = {};
+            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
             const items = buckets[key];
-            if (!items.length) continue;
-            const { contains, matches } = splitMatches(items);
+
+            // Build fromPatterns either from items or from extras.from
+            let fromPatterns = [];
+            if (items && items.length) fromPatterns = items;
+            else if (extras.from) fromPatterns = [extras.from];
+            if (!fromPatterns.length) continue;
+
+            const { contains, matches } = splitMatches(fromPatterns);
             const conditions = [];
 
             // 1. Check standard "From" header using address test

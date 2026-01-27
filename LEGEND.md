@@ -27,7 +27,7 @@ A combination of characters that determine what happens when the pattern matches
 | `R` | **Read** | Marks the email as seen (`\Seen`). |
 | `A` | **Archive** | Moves email to the `Archive` folder (and the Rule folder). |
 | `S` | **Stop** | Stops processing further Sieve scripts. |
-| `D` | **Designated** | Legacy: moved email to a specific destination. Use `&label&` instead. |
+| `&label&` | **label** | Set the label for messages matching this rule. Defaults to the name of the rule list. |
 | `B` | **Bounce** | Rejects the message with an error. |
 | `x[N][u]` | **Expire** | Sets expiration. `x1`=1 day. `x6h`=6 hours. `x30d`=30 days. |
 
