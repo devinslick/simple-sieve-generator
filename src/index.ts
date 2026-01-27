@@ -321,10 +321,10 @@ app.get('/', (c) => {
             async function loadSelectedList() {
                 const name = document.getElementById('savedLists').value;
                 if(!name) return;
-                
+
                 // Update Folder Name input match selected list
                 document.getElementById('folderName').value = name;
-                
+
                 const res = await fetch('/api/lists/' + name);
                 if(res.ok) {
                     document.getElementById('rulesInput').value = await res.text();
@@ -379,422 +379,101 @@ app.get('/', (c) => {
                 setEditorMode(mode);
             };
 
-            // --- BUILDER LOGIC ---
-
-            let BUILDER_STATE = {
-                global: [],
-                scoped: [],
-                raw: [] // content we couldn't parse
-            };
+            // --- SIMPLE ADD RULE LOGIC ---
 
             function setEditorMode(mode) {
                 localStorage.setItem('editorMode', mode);
-                const textArea = document.getElementById('rulesInput');
-                const builder = document.getElementById('basicBuilder');
+                const addRuleForm = document.getElementById('addRuleForm');
                 const toggle = document.getElementById('modeToggle');
                 const legendLink = document.getElementById('legendLink');
-                
+
                 if (mode === 'basic') {
-                    // Sync Text -> Builder
-                    parseRulesToBuilder(textArea.value);
-                    renderBuilder();
-                    
-                    textArea.classList.add('builder-mode-hidden');
-                    builder.classList.remove('builder-mode-hidden');
+                    addRuleForm.classList.remove('builder-mode-hidden');
                     legendLink.style.display = 'none';
                     toggle.innerText = 'Switch to Advanced (Text)';
                 } else {
-                    // Sync Builder -> Text (Implicitly done on change, but ensure)
-                    // Actually, if we are switching TO text, the text area is already updated by the changers
-                    
-                    textArea.classList.remove('builder-mode-hidden');
-                    builder.classList.add('builder-mode-hidden');
+                    addRuleForm.classList.add('builder-mode-hidden');
                     legendLink.style.display = 'inline';
-                    toggle.innerText = 'Switch to Basic (Builder)';
+                    toggle.innerText = 'Switch to Basic (Add Rule)';
                 }
             }
-            
+
             function toggleEditorMode() {
                 const current = localStorage.getItem('editorMode') || 'basic';
                 setEditorMode(current === 'basic' ? 'advanced' : 'basic');
             }
 
-            // --- Frontend Code Parsing (Ported from Backend) ---
-            
-            function helperParseDSL(token) {
-                // Matches parseDSL in backend
-                if (!token) return null;
-                let temp = token;
-                let label = null;
-                let expire = null;
-                
-                const labelMatch = temp.match(/!([\w-]+)!/);
-                if (labelMatch) {
-                    label = labelMatch[1];
-                    temp = temp.replace(labelMatch[0], '');
-                }
-                const expireMatch = temp.match(/x(\d+)([dh]?)/i);
-                if (expireMatch) {
-                    expire = 'x' + expireMatch[1] + expireMatch[2];
-                    temp = temp.replace(expireMatch[0], '');
-                }
-                
-                if (temp.length > 0 && !/^[frasbd]+$/i.test(temp)) return null;
-                
-                return {
-                    F: /f/i.test(temp),
-                    R: /r/i.test(temp),
-                    A: /a/i.test(temp),
-                    S: /s/i.test(temp),
-                    B: /b/i.test(temp),
-                    label: label,
-                    expire: expire,
-                    hasFlags: (temp.length > 0 || label !== null || expire !== null)
-                };
-            }
+            function addRule() {
+                const ruleType = document.getElementById('newRuleType').value;
+                const matchText = document.getElementById('newRuleMatch').value.trim();
 
-            function parseRulesToBuilder(text) {
-                const lines = text.split('\\n');
-                const state = { global: [], scoped: [], alias: [], raw: [] };
-                let scope = 'global';
-                for (let line of lines) {
-                    const originalLine = line;
-                    line = line.trim();
-                    if (!line || line.startsWith('#')) continue;
-                    // Scope switching
-                    if (line === '!' || line === 'scoped') { scope = 'scoped'; continue; }
-                    if (line === 'global') { scope = 'global'; continue; }
-                    // Handle inline definition: "global ..." or "! ..."
-                    let lineScope = scope;
-                    let cleanLine = line;
-                    if (cleanLine.startsWith('!') && !cleanLine.match(/^![^!]+!/)) {
-                        lineScope = 'scoped';
-                        cleanLine = cleanLine.substring(1).trim();
-                        if(!cleanLine) continue;
-                    } else if (cleanLine.toLowerCase().startsWith('global ')) {
-                        lineScope = 'global';
-                        cleanLine = cleanLine.substring(7).trim();
+                if (!matchText) {
+                    alert('Please enter match text');
+                    return;
+                }
+
+                // Build flags string
+                let flags = '';
+                if (document.getElementById('flagF').checked) flags += 'F';
+                if (document.getElementById('flagR').checked) flags += 'R';
+                if (document.getElementById('flagA').checked) flags += 'A';
+                if (document.getElementById('flagS').checked) flags += 'S';
+                if (document.getElementById('flagB').checked) flags += 'B';
+                if (document.getElementById('flagD').checked) flags += 'D';
+
+                const label = document.getElementById('newRuleLabel').value.trim();
+                if (label) flags += '!' + label + '!';
+
+                if (!flags) flags = 'F'; // Default to File
+
+                // Build the rule line
+                let ruleLine = '';
+                if (ruleType === 'alias') {
+                    const aliases = document.getElementById('newRuleAliases').value.trim();
+                    if (!aliases) {
+                        alert('Please enter alias(es)');
+                        return;
                     }
-                    // Alias rule: !alias1,alias2!CODE [Args]
-                    let aliasMatch = cleanLine.match(/^!([^!]+)!(.*)$/);
-                    if (aliasMatch) {
-                        const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
-                        const rest = aliasMatch[2].trim();
-                        // Parse code/flags and match/label
-                        const parts = rest.split(/\s+/);
-                        const first = parts[0];
-                        const last = parts.length > 0 ? parts[parts.length - 1] : '';
-                        let dsl = helperParseDSL(first);
-                        let match = rest.substring(first.length).trim();
-                        if (!(dsl && dsl.hasFlags)) {
-                            dsl = helperParseDSL(last);
-                            if (dsl && dsl.hasFlags) {
-                                match = rest.substring(0, rest.length - last.length).trim();
-                            } else {
-                                dsl = { F: true };
-                            }
-                        }
-                        // If D flag and match present, treat as label
-                        if (dsl && dsl.D && !dsl.label && match) {
-                            dsl.label = match;
-                            match = '';
-                        }
-                        state.alias.push({
-                            aliases,
-                            match,
-                            flags: dsl
-                        });
-                        continue;
+                    ruleLine = '!' + aliases + '!' + flags;
+                    if (matchText && matchText !== aliases) {
+                        ruleLine += ' ' + matchText;
                     }
-                    // Parse Type
-                    let type = 'subject';
-                    if (cleanLine.toLowerCase().startsWith('from:')) {
-                        type = 'from';
-                        cleanLine = cleanLine.substring(5).trim();
-                    }
-                    // Parse Code/Match
-                    const parts = cleanLine.split(/\s+/);
-                    const first = parts[0];
-                    const last = parts.length > 0 ? parts[parts.length - 1] : '';
-                    let dsl = helperParseDSL(last);
-                    let match = cleanLine;
-                    if (dsl && dsl.hasFlags) {
-                        match = cleanLine.substring(0, cleanLine.length - last.length).trim();
-                    } else {
-                        dsl = helperParseDSL(first);
-                        if (dsl && dsl.hasFlags) {
-                            match = cleanLine.substring(first.length).trim();
-                        } else {
-                            dsl = { F: true };
-                        }
-                    }
-                    if (match.includes('!')) {
-                        state.raw.push(originalLine);
-                        continue;
-                    }
-                    state[lineScope].push({
-                        type,
-                        match,
-                        flags: dsl
-                    });
+                } else if (ruleType === 'from') {
+                    ruleLine = 'from:' + matchText + ' ' + flags;
+                } else {
+                    ruleLine = matchText + ' ' + flags;
                 }
-                BUILDER_STATE = state;
-            }
-            
-            function generateFlagsString(f) {
-                // Returns e.g. "FRAS", "B", "Ax2h", "F!label!"
-                let s = '';
-                // Logic: Default is usually File (F). 
-                // But generally explicit is better.
-                if (f.F) s += 'F';
-                if (f.R) s += 'R';
-                if (f.A) s += 'A';
-                if (f.S) s += 'S';
-                if (f.B) s += 'B';
-                
-                if (f.expire) s += f.expire;
-                if (f.label) s += '!' + f.label + '!';
-                
-                // If empty, default to F? Generator handles "default".
-                // But let's be explicit if F is checked.
-                return s; 
+
+                // Append to textarea
+                const textarea = document.getElementById('rulesInput');
+                const currentText = textarea.value.trim();
+                textarea.value = currentText ? currentText + '\\n' + ruleLine : ruleLine;
+
+                // Clear form
+                document.getElementById('newRuleMatch').value = '';
+                document.getElementById('newRuleLabel').value = '';
+                document.getElementById('newRuleAliases').value = '';
+                document.getElementById('flagF').checked = true;
+                document.getElementById('flagR').checked = false;
+                document.getElementById('flagA').checked = false;
+                document.getElementById('flagS').checked = false;
+                document.getElementById('flagB').checked = false;
+                document.getElementById('flagD').checked = false;
+                updateRuleTypeFields();
             }
 
-            function updateFromBuilder() {
-                const globalLines = BUILDER_STATE.global.map(r => {
-                    const prefix = r.type === 'from' ? 'from:' : '';
-                    const code = generateFlagsString(r.flags);
-                    return prefix + r.match + ' ' + code;
-                });
-                const scopedLines = BUILDER_STATE.scoped.map(r => {
-                    const prefix = r.type === 'from' ? 'from:' : '';
-                    const code = generateFlagsString(r.flags);
-                    return prefix + r.match + ' ' + code;
-                });
-                const aliasLines = BUILDER_STATE.alias.map(r => {
-                    const aliasStr = '!' + r.aliases.join(',') + '!';
-                    const code = generateFlagsString(r.flags);
-                    let line = aliasStr + code;
-                    if (r.match && r.match.length > 0) {
-                        line += ' ' + r.match;
-                    }
-                    return line;
-                });
-                let text = '';
-                if (globalLines.length > 0) {
-                    text += 'global\\n' + globalLines.join('\\n') + '\\n\\n';
-                }
-                if (scopedLines.length > 0) {
-                    text += 'scoped\\n' + scopedLines.join('\\n') + '\\n\\n';
-                }
-                if (aliasLines.length > 0) {
-                    text += aliasLines.join('\\n') + '\\n\\n';
-                }
-                if (BUILDER_STATE.raw.length > 0) {
-                    text += '# --- Raw/Unparsed Rules ---\\n';
-                    text += BUILDER_STATE.raw.join('\\n');
-                }
-                document.getElementById('rulesInput').value = text;
-            }
+            function updateRuleTypeFields() {
+                const ruleType = document.getElementById('newRuleType').value;
+                const aliasField = document.getElementById('aliasFieldWrapper');
+                const matchLabel = document.getElementById('matchLabel');
 
-            // --- Builder Rendering ---
-
-            function renderBuilder() {
-                const container = document.getElementById('basicBuilder');
-                container.innerHTML = '';
-                
-                // Section: Global
-                container.appendChild(createSection('Global Rules (All Emails)', 'global', BUILDER_STATE.global));
-                // Section: Scoped
-                container.appendChild(createSection('Folder Rules (Only this Folder)', 'scoped', BUILDER_STATE.scoped));
-                // Section: Alias
-                container.appendChild(createAliasSection('Alias Rules (Forwarded to you)', BUILDER_STATE.alias));
-                // Raw Warning
-                if (BUILDER_STATE.raw.length > 0) {
-                    const div = document.createElement('div');
-                    div.style.color = 'var(--warning)';
-                    div.style.fontSize = '0.9em';
-                    div.innerText = BUILDER_STATE.raw.length + ' rules are hidden (too complex for Basic Mode). They will be preserved.';
-                    container.appendChild(div);
+                if (ruleType === 'alias') {
+                    aliasField.style.display = 'block';
+                    matchLabel.innerText = 'Subject Filter (optional):';
+                } else {
+                    aliasField.style.display = 'none';
+                    matchLabel.innerText = ruleType === 'from' ? 'Email/Domain:' : 'Subject Text:';
                 }
-            }
-
-            function createAliasSection(title, rows) {
-                const sect = document.createElement('div');
-                sect.className = 'builder-section';
-                const h3 = document.createElement('h3');
-                h3.innerText = title;
-                sect.appendChild(h3);
-                const list = document.createElement('div');
-                rows.forEach((row, idx) => {
-                    list.appendChild(createAliasRow(idx, row));
-                });
-                sect.appendChild(list);
-                const addBtn = document.createElement('button');
-                addBtn.className = 'add-rule-btn';
-                addBtn.innerText = '+ Add Alias Rule';
-                addBtn.onclick = () => {
-                    BUILDER_STATE.alias.push({
-                        aliases: ['alias'],
-                        match: '',
-                        flags: { F: true, R: false, A: false, S: false, B: false, D: false }
-                    });
-                    renderBuilder();
-                    updateFromBuilder();
-                };
-                sect.appendChild(addBtn);
-                return sect;
-            }
-
-            function createAliasRow(idx, data) {
-                const row = document.createElement('div');
-                row.className = 'rule-row';
-                // Aliases input
-                const aliasInput = document.createElement('input');
-                aliasInput.type = 'text';
-                aliasInput.placeholder = 'alias1,alias2';
-                aliasInput.value = data.aliases.join(',');
-                aliasInput.oninput = (e) => {
-                    data.aliases = e.target.value.split(',').map(s => s.trim()).filter(s => s);
-                    updateFromBuilder();
-                };
-                row.appendChild(aliasInput);
-                // Flags
-                const actions = document.createElement('div');
-                actions.className = 'rule-actions';
-                const addCheck = (label, key) => {
-                    const l = document.createElement('label');
-                    const cb = document.createElement('input');
-                    cb.type = 'checkbox';
-                    cb.checked = !!data.flags[key];
-                    cb.onchange = (e) => {
-                        data.flags[key] = e.target.checked;
-                        updateFromBuilder();
-                    };
-                    l.appendChild(cb);
-                    l.appendChild(document.createTextNode(label));
-                    actions.appendChild(l);
-                };
-                addCheck('File', 'F');
-                addCheck('Read', 'R');
-                addCheck('Stop', 'S');
-                addCheck('Designate', 'D');
-                row.appendChild(actions);
-                // Match/Label input
-                const matchInput = document.createElement('input');
-                matchInput.type = 'text';
-                matchInput.placeholder = 'Label or Subject Match';
-                matchInput.value = data.match;
-                matchInput.oninput = (e) => {
-                    data.match = e.target.value;
-                    updateFromBuilder();
-                };
-                row.appendChild(matchInput);
-                // Delete
-                const del = document.createElement('button');
-                del.className = 'rule-delete-btn';
-                del.innerText = '🗑️';
-                del.onclick = () => {
-                    BUILDER_STATE.alias.splice(idx, 1);
-                    renderBuilder();
-                    updateFromBuilder();
-                };
-                row.appendChild(del);
-                return row;
-            }
-
-            function createSection(title, scopeName, rows) {
-                const sect = document.createElement('div');
-                sect.className = 'builder-section';
-                
-                const h3 = document.createElement('h3');
-                h3.innerText = title;
-                sect.appendChild(h3);
-                
-                const list = document.createElement('div');
-                rows.forEach((row, idx) => {
-                    list.appendChild(createRow(scopeName, idx, row));
-                });
-                sect.appendChild(list);
-                
-                const addBtn = document.createElement('button');
-                addBtn.className = 'add-rule-btn';
-                addBtn.innerText = '+ Add Rule';
-                addBtn.onclick = () => {
-                    BUILDER_STATE[scopeName].push({
-                        type: 'subject',
-                        match: '',
-                        flags: { F: true, R: false, A: false, S: false, B: false } // Default
-                    });
-                    renderBuilder();
-                    updateFromBuilder();
-                };
-                sect.appendChild(addBtn);
-                
-                return sect;
-            }
-            
-            function createRow(scopeName, idx, data) {
-                 const row = document.createElement('div');
-                 row.className = 'rule-row';
-                 
-                 // Type Select
-                 const typeSel = document.createElement('select');
-                 typeSel.innerHTML = '<option value="subject">Subject</option><option value="from">From</option>';
-                 typeSel.value = data.type;
-                 typeSel.onchange = (e) => {
-                     data.type = e.target.value;
-                     updateFromBuilder();
-                 };
-                 row.appendChild(typeSel);
-                 
-                 // Match Input
-                 const input = document.createElement('input');
-                 input.type = 'text';
-                 input.placeholder = data.type === 'from' ? 'user@example.com' : 'Text to match';
-                 input.value = data.match;
-                 input.oninput = (e) => {
-                     data.match = e.target.value;
-                     updateFromBuilder();
-                 };
-                 row.appendChild(input);
-                 
-                 // Flags
-                 const actions = document.createElement('div');
-                 actions.className = 'rule-actions';
-                 
-                 const addCheck = (label, key) => {
-                     const l = document.createElement('label');
-                     const cb = document.createElement('input');
-                     cb.type = 'checkbox';
-                     cb.checked = !!data.flags[key];
-                     cb.onchange = (e) => {
-                         data.flags[key] = e.target.checked;
-                         updateFromBuilder();
-                     };
-                     l.appendChild(cb);
-                     l.appendChild(document.createTextNode(label));
-                     actions.appendChild(l);
-                 };
-                 
-                 addCheck('File', 'F');
-                 addCheck('Read', 'R');
-                 addCheck('Stop', 'S');
-                 
-                 row.appendChild(actions);
-                 
-                 // Delete
-                 const del = document.createElement('button');
-                 del.className = 'rule-delete-btn';
-                 del.innerText = '🗑️';
-                 del.onclick = () => {
-                     BUILDER_STATE[scopeName].splice(idx, 1);
-                     renderBuilder();
-                     updateFromBuilder();
-                 };
-                 row.appendChild(del);
-                 
-                 return row;
             }
         </script>
       </head>
@@ -827,12 +506,53 @@ app.get('/', (c) => {
         
         <div>
           <label for="rulesInput">
-              Rules List: 
+              Rules List:
               <a id="legendLink" href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a>
-              <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Switch to Basic</button>
+              <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Switch to Basic (Add Rule)</button>
           </label>
-          <textarea id="rulesInput" placeholder="!alias1,alias2!FRASD deal&#10;!scope&#10;Subject Rule F&#10;from:sender@example.com FR"></textarea>
-          <div id="basicBuilder" class="builder-mode-hidden"></div>
+          <textarea id="rulesInput" placeholder="Subject Rule F&#10;from:sender@example.com FR&#10;!alias1,alias2!F"></textarea>
+
+          <div id="addRuleForm" class="builder-mode-hidden card" style="margin-top: 1rem; padding: 1rem;">
+            <h3 style="margin-top: 0;">Add New Rule</h3>
+
+            <div style="margin-bottom: 0.75rem;">
+              <label>Rule Type:</label>
+              <select id="newRuleType" onchange="updateRuleTypeFields()" style="width: 100%;">
+                <option value="subject">Subject Match</option>
+                <option value="from">From/Sender Match</option>
+                <option value="alias">Alias Rule</option>
+              </select>
+            </div>
+
+            <div id="aliasFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
+              <label>Alias(es) (comma-separated):</label>
+              <input type="text" id="newRuleAliases" placeholder="alias1, alias2" style="width: 100%;">
+            </div>
+
+            <div style="margin-bottom: 0.75rem;">
+              <label id="matchLabel">Subject Text:</label>
+              <input type="text" id="newRuleMatch" placeholder="Text to match" style="width: 100%;">
+            </div>
+
+            <div style="margin-bottom: 0.75rem;">
+              <label>Actions:</label>
+              <div class="rule-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                <label><input type="checkbox" id="flagF" checked> File</label>
+                <label><input type="checkbox" id="flagR"> Read</label>
+                <label><input type="checkbox" id="flagA"> Archive</label>
+                <label><input type="checkbox" id="flagS"> Stop</label>
+                <label><input type="checkbox" id="flagB"> Block</label>
+                <label><input type="checkbox" id="flagD"> Designate</label>
+              </div>
+            </div>
+
+            <div style="margin-bottom: 0.75rem;">
+              <label>Custom Label (for Designate):</label>
+              <input type="text" id="newRuleLabel" placeholder="Optional label" style="width: 100%;">
+            </div>
+
+            <button onclick="addRule()" class="btn-primary" style="width: 100%;">Add Rule</button>
+          </div>
         </div>
         
         <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
