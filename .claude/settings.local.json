@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-Content AI_INSTRUCTIONS.md\")",
+      "Bash(powershell -Command:*)",
+      "Bash(git -C \"c:/Users/Devin/Repos/simple-sieve-generator\" show HEAD:src/index.ts)"
+    ]
+  }
+}

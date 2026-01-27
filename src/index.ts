@@ -522,56 +522,56 @@ app.get('/', (c) => {
           <input type="text" id="folderName" value="Shopping">
         </div>
         
-        <div>
-          <label for="rulesInput">
-              Rules List:
-              <a id="legendLink" href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a>
-              <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Show rule entry form</button>
-          </label>
-          <textarea id="rulesInput" placeholder="Subject Rule F&#10;from:sender@example.com FR&#10;!alias1,alias2!F"></textarea>
+                <div>
+                    <div id="addRuleForm" class="builder-mode-hidden card" style="margin-top: 1rem; padding: 1rem;">
+                        <h3 style="margin-top: 0;">Add New Rule</h3>
 
-          <div id="addRuleForm" class="builder-mode-hidden card" style="margin-top: 1rem; padding: 1rem;">
-            <h3 style="margin-top: 0;">Add New Rule</h3>
+                        <div style="margin-bottom: 0.75rem;">
+                            <label>Rule Type:</label>
+                            <select id="newRuleType" onchange="updateRuleTypeFields()" style="width: 100%;">
+                                <option value="subject">Subject Match</option>
+                                <option value="from">From/Sender Match</option>
+                                <option value="alias">Destination Mailbox Rule</option>
+                            </select>
+                        </div>
 
-            <div style="margin-bottom: 0.75rem;">
-              <label>Rule Type:</label>
-              <select id="newRuleType" onchange="updateRuleTypeFields()" style="width: 100%;">
-                <option value="subject">Subject Match</option>
-                <option value="from">From/Sender Match</option>
-                <option value="alias">Destination Mailbox Rule</option>
-              </select>
-            </div>
+                        <div id="aliasFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
+                            <label>Destination Mailbox(es) (comma-separated):</label>
+                            <input type="text" id="newRuleAliases" placeholder="alias1, alias2" style="width: 100%;">
+                        </div>
 
-            <div id="aliasFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
-              <label>Destination Mailbox(es) (comma-separated):</label>
-              <input type="text" id="newRuleAliases" placeholder="alias1, alias2" style="width: 100%;">
-            </div>
+                        <div style="margin-bottom: 0.75rem;">
+                            <label id="matchLabel">Subject Text:</label>
+                            <input type="text" id="newRuleMatch" placeholder="Text to match" style="width: 100%;">
+                        </div>
 
-            <div style="margin-bottom: 0.75rem;">
-              <label id="matchLabel">Subject Text:</label>
-              <input type="text" id="newRuleMatch" placeholder="Text to match" style="width: 100%;">
-            </div>
+                        <div style="margin-bottom: 0.75rem;">
+                            <label>Actions:</label>
+                            <div class="rule-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                <label><input type="checkbox" id="flagF" checked> File</label>
+                                <label><input type="checkbox" id="flagR"> Read</label>
+                                <label><input type="checkbox" id="flagA"> Archive</label>
+                                <label><input type="checkbox" id="flagS"> Stop</label>
+                                <label><input type="checkbox" id="flagB"> Block</label>
+                                <label><input type="checkbox" id="flagD" onchange="toggleLabelField()"> Designate</label>
+                            </div>
+                        </div>
 
-            <div style="margin-bottom: 0.75rem;">
-              <label>Actions:</label>
-              <div class="rule-actions" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                <label><input type="checkbox" id="flagF" checked> File</label>
-                <label><input type="checkbox" id="flagR"> Read</label>
-                <label><input type="checkbox" id="flagA"> Archive</label>
-                <label><input type="checkbox" id="flagS"> Stop</label>
-                <label><input type="checkbox" id="flagB"> Block</label>
-                <label><input type="checkbox" id="flagD" onchange="toggleLabelField()"> Designate</label>
-              </div>
-            </div>
+                        <div id="labelFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
+                            <label>Designated Label:</label>
+                            <input type="text" id="newRuleLabel" placeholder="Label name" style="width: 100%;">
+                        </div>
 
-            <div id="labelFieldWrapper" style="display: none; margin-bottom: 0.75rem;">
-              <label>Designated Label:</label>
-              <input type="text" id="newRuleLabel" placeholder="Label name" style="width: 100%;">
-            </div>
+                        <button onclick="addRule()" class="btn-primary" style="width: 100%;">Add Rule</button>
+                    </div>
 
-            <button onclick="addRule()" class="btn-primary" style="width: 100%;">Add Rule</button>
-          </div>
-        </div>
+                    <label for="rulesInput">
+                            Rules List:
+                            <a id="legendLink" href="/legend" target="_blank" style="font-size: 0.9em; color: var(--primary); text-decoration: none;">(View Legend)</a>
+                            <button id="modeToggle" onclick="toggleEditorMode()" style="float: right; font-size: 0.8em; padding: 2px 8px; margin-top: -5px;">Show rule entry form</button>
+                    </label>
+                    <textarea id="rulesInput" placeholder="Subject Rule F&#10;from:sender@example.com FR&#10;!alias1,alias2!F"></textarea>
+                </div>
         
         <button onclick="generateScript()" class="btn-primary" style="width: 100%; margin-bottom: 1.5rem;">Generate Sieve Script</button>
         
