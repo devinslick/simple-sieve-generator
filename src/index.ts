@@ -352,9 +352,9 @@ app.get('/', (c) => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ folderName, rulesInput })
                     });
-                    
+            
                     if (!response.ok) throw new Error(await response.text());
-                    
+            
                     const data = await response.json();
                     document.getElementById('genOutput').value = data.script;
                     document.getElementById('genLogs').innerText = 'Generation successful!';
@@ -1046,6 +1046,31 @@ function generateSieveScript(folderName, buckets) {
         return { contains, matches };
     };
 
+    const parseExtras = (extraParts) => {
+        const extras = {};
+        for (const e of extraParts) {
+            const [k, v] = e.split('=');
+            if (k && v) extras[k] = decodeURIComponent(v);
+        }
+        return extras;
+    };
+
+    const buildFromConditions = (patterns) => {
+        const fm = splitMatches(patterns);
+        const conditions = [];
+        if (fm.contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+        if (fm.matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+        if (fm.contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+        if (fm.matches.length) {
+            const headerMatches = fm.matches.map(m => {
+                const clean = m.substring(1, m.length - 1);
+                return `"*${clean}*"`;
+            });
+            conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+        }
+        return conditions;
+    };
+
     // --- ALIASES ---
     // 1. Filtered Aliases (Specific rules first)
     const aliasFilteredKeys = Object.keys(buckets).filter(k => k.startsWith('aliases-filtered:'));
@@ -1209,31 +1234,22 @@ function generateSieveScript(folderName, buckets) {
             }
         }
         for (const key of globalFromKeys) {
-            const part = key.substring('global-from-'.length);
-            const [mainPart, ...extraParts] = part.split('::');
-            const suffix = mainPart;
-            const extras = {};
-            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
+            const suffix = key.substring('global-from-'.length);
             const items = buckets[key];
-
-            // If no explicit items but extras.from present, we'll build from-patterns from extras.from
-            let fromPatterns = [];
-            if (items && items.length) fromPatterns = items;
-            else if (extras.from) fromPatterns = [extras.from];
-
-            if (!fromPatterns.length) continue;
-
-            const fm = splitMatches(fromPatterns);
+            if (!items.length) continue;
+            const { contains, matches } = splitMatches(items);
             const conditions = [];
-
+            
             // 1. Check standard "From" header using address test
-            if (fm.contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
-            if (fm.matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
-
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
+            
             // 2. Check "X-Simplelogin-Original-From" as a text header
-            if (fm.contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
-            if (fm.matches.length) {
-                const headerMatches = fm.matches.map(m => {
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
+            if (matches.length) {
+                // For header matching, we need to wrap the pattern in wildcards to match the full header string
+                // e.g. "Name <email>" needs "*email*"
+                const headerMatches = matches.map(m => {
                     const clean = m.substring(1, m.length - 1); // remove quotes
                     return `"*${clean}*"`;
                 });
@@ -1296,20 +1312,10 @@ function generateSieveScript(folderName, buckets) {
         }
         
         for (const key of scopedFromKeys) {
-            const part = key.substring('scoped-from-'.length);
-            const [mainPart, ...extraParts] = part.split('::');
-            const suffix = mainPart;
-            const extras = {};
-            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
+            const suffix = key.substring('scoped-from-'.length);
             const items = buckets[key];
-
-            // Build fromPatterns either from items or from extras.from
-            let fromPatterns = [];
-            if (items && items.length) fromPatterns = items;
-            else if (extras.from) fromPatterns = [extras.from];
-            if (!fromPatterns.length) continue;
-
-            const { contains, matches } = splitMatches(fromPatterns);
+            if (!items.length) continue;
+            const { contains, matches } = splitMatches(items);
             const conditions = [];
 
             // 1. Check standard "From" header using address test
