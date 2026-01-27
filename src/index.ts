@@ -145,8 +145,10 @@ app.get('/', (c) => {
 
           /* Responsive */
           @media (max-width: 600px) {
-            .controls-row { flex-direction: column; }
-            .controls-row select, .controls-row button { width: 100%; }
+            .controls-row { flex-wrap: nowrap; gap: 4px; }
+            .controls-row select { flex: 1; min-width: 100px; }
+            .controls-row button { padding: 0.5rem; font-size: 0.75rem; }
+            .controls-row .btn-icon { padding: 0.4rem 0.5rem; }
             h1 { font-size: 1.5rem; }
             body { padding: 0.75rem; }
           }
@@ -498,11 +500,11 @@ app.get('/', (c) => {
         <div class="card">
              <label for="savedLists">Load/Manage Saved List:</label>
              <div class="controls-row">
-                 <button onclick="moveList(-1)" title="Move Up" style="width: auto; padding-left: 0.5rem; padding-right: 0.5rem;">⬆️</button>
-                 <button onclick="moveList(1)" title="Move Down" style="width: auto; padding-left: 0.5rem; padding-right: 0.5rem;">⬇️</button>
                  <select id="savedLists" onchange="loadSelectedList()"></select>
-                 <button onclick="saveCurrentList()">Save Current</button>
-                 <button onclick="deleteCurrentList()" class="btn-danger">Delete Selected</button>
+                 <button class="btn-icon" onclick="moveList(-1)" title="Move Up">⬆️</button>
+                 <button class="btn-icon" onclick="moveList(1)" title="Move Down">⬇️</button>
+                 <button onclick="saveCurrentList()">Save</button>
+                 <button onclick="deleteCurrentList()" class="btn-danger">Delete</button>
              </div>
         </div>
 
