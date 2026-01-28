@@ -1,19 +1,18 @@
-# From/sender matching rules
-#Rule 1
-^sender1@domain.com^ F
-^sender2@domain.com^ F
-#Rule 2
-^sender1@domain.com^ FR
-^sender2@domain.com^ FR
-#Rule 3
-^sender3@domain.com^ FR Subject1
-^sender3@domain.com^ FR *Subject 2 Match*
-#Rule 4
-^sender3@domain.com^ FRAS Subject1
-^sender3@domain.com^ FRAS *Subject 2 Match*
-#Rule 5
+#From/sender matching rules
+# Global | From | auto:F
+^sender1a@domain.com^ F
+^sender1b@domain.com^ F
+# Global | From | auto:F_R
+^sender2a@domain.com^ FR
+^sender2b@domain.com^ FR
+# Global | From+Subject | auto:F_R
+^sender3b@domain.com^ FR *Subject 2 Match*
+# Global | From+Subject | auto:F_R_A_S
+^sender4a@domain.com^ FRAS Subject1
+^sender4a@domain.com^ FRAS *Subject 2 Match*
+# Global | From | auto:F_R_A_S
 ^sender5a@domain.com,sender5b@domain.com,sender5c@domain.com^ FRAS
-#Rule 6 - Not working - TODO
+# Global | From | auto:B
 ^sender6@domain.com^ B
 # Global | From+Subject | auto:B
 ^sender7@domain.com^ B Subject Filter
