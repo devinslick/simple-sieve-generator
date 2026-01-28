@@ -1,4 +1,4 @@
-# Generated Sieve Script for Notifications
+# Generated Sieve Script for from-rules
 require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
 
 # Generated: Do not run this script on spam messages
@@ -10,38 +10,79 @@ if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value 
 
 # Global | From | auto:F
 if anyof (
-  address :all :comparator "i;unicode-casemap" :contains "From" ["noreply@amazon.com"],
-  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["noreply@amazon.com"]
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender1a@domain.com", "sender1b@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender1a@domain.com", "sender1b@domain.com"]
 ) {
-  fileinto "Notifications";
+  fileinto "from-rules";
 }
 
 # Global | From | auto:F_R
 if anyof (
-  address :all :comparator "i;unicode-casemap" :contains "From" ["notifications@github.com"],
-  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["notifications@github.com"]
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender2a@domain.com", "sender2b@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender2a@domain.com", "sender2b@domain.com"]
 ) {
   addflag "\\Seen";
-  fileinto "Notifications";
+  fileinto "from-rules";
 }
 
-# Global | From | auto:F_R_S
-if anyof (
-  address :all :comparator "i;unicode-casemap" :contains "From" ["alerts@bank.com"],
-  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["alerts@bank.com"]
+# Global | From+Subject | auto:F_R
+if allof (
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Subject 2 Match*"],
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender3b@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender3b@domain.com"]
+)
 ) {
   addflag "\\Seen";
-  fileinto "Notifications";
+  fileinto "from-rules";
+}
+
+# Global | From+Subject | auto:F_R_A_S
+if allof (
+  anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Subject1"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Subject 2 Match*"]
+),
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender4a@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender4a@domain.com"]
+)
+) {
+  addflag "\\Seen";
+  fileinto "Archive";
+  fileinto "from-rules";
   stop;
 }
 
 # Global | From | auto:F_R_A_S
 if anyof (
-  address :all :comparator "i;unicode-casemap" :matches "From" ["*@newsletter.example.com"],
-  header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" ["**@newsletter.example.com*"]
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender5a@domain.com,sender5b@domain.com,sender5c@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender5a@domain.com,sender5b@domain.com,sender5c@domain.com"]
 ) {
   addflag "\\Seen";
   fileinto "Archive";
-  fileinto "Notifications";
+  fileinto "from-rules";
   stop;
 }
+
+# Global | From | auto:B
+if anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender6@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender6@domain.com"]
+) {
+  reject "Message Rejected";
+  stop;
+}
+
+# Global | From+Subject | auto:B
+if allof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Subject Filter"],
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender7@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender7@domain.com"]
+)
+) {
+  reject "Message Rejected";
+  stop;
+}
+

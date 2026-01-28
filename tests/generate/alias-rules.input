@@ -1,4 +1,9 @@
-# Alias-based routing rules
-!auto,receipts!FRAS
-!credit!FR Order Confirmation
-!newsletters!F
+#Rule 1
+!mailbox1!F
+!mailbox2,mailbox3!F
+#Rule 2
+!mailbox4!F Subject1
+!mailbox4!F Subject1 2
+# Aliases (Filtered) | auto:F_R_A_S
+!mailbox4!FRAS Subject2
+!mailbox4!FRAS Subject2 2
