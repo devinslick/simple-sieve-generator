@@ -10,7 +10,7 @@
     {
       "name": "from-rules",
       "description": "From/sender address matching rules",
-      "folderName": "Notifications",
+      "folderName": "from-rules",
       "inputFile": "from-rules.input",
       "expectedFile": "from-rules.expected"
     },
