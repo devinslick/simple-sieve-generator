@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test:generate": "node tests/generate/run-tests.js"
   },
   "dependencies": {
     "hono": "^3.12.0"

@@ -1,0 +1,47 @@
+# Generated Sieve Script for Notifications
+require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
+
+# Generated: Do not run this script on spam messages
+if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value "ge" :comparator "i;ascii-numeric" "${1}") {
+    return;
+}
+
+# --- GLOBAL RULES ---
+
+# Global | From | auto:F
+if anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["noreply@amazon.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["noreply@amazon.com"]
+) {
+  fileinto "Notifications";
+}
+
+# Global | From | auto:F_R
+if anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["notifications@github.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["notifications@github.com"]
+) {
+  addflag "\\Seen";
+  fileinto "Notifications";
+}
+
+# Global | From | auto:F_R_S
+if anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["alerts@bank.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["alerts@bank.com"]
+) {
+  addflag "\\Seen";
+  fileinto "Notifications";
+  stop;
+}
+
+# Global | From | auto:F_R_A_S
+if anyof (
+  address :all :comparator "i;unicode-casemap" :matches "From" ["*@newsletter.example.com"],
+  header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" ["**@newsletter.example.com*"]
+) {
+  addflag "\\Seen";
+  fileinto "Archive";
+  fileinto "Notifications";
+  stop;
+}

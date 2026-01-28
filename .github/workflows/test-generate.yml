@@ -1,0 +1,85 @@
+name: Test Generate Function
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: 'Filter tests by name (optional)'
+        required: false
+        default: ''
+      update_expected:
+        description: 'Update expected output files'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Start dev server
+        run: |
+          # Start wrangler dev in background
+          npx wrangler dev --port 8787 &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+
+          # Wait for server to be ready
+          echo "Waiting for server to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8787/ > /dev/null 2>&1; then
+              echo "Server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "Server failed to start within 30 seconds"
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Run tests
+        id: run_tests
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.filter }}" ]; then
+            ARGS="$ARGS --filter=${{ github.event.inputs.filter }}"
+          fi
+          if [ "${{ github.event.inputs.update_expected }}" == "true" ]; then
+            ARGS="$ARGS --update-expected"
+          fi
+
+          node tests/generate/run-tests.js $ARGS
+
+      - name: Stop dev server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            kill $SERVER_PID 2>/dev/null || true
+          fi
+
+      - name: Commit updated expected files
+        if: github.event.inputs.update_expected == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet tests/generate/*.expected; then
+            echo "No changes to expected files"
+          else
+            git add tests/generate/*.expected
+            git commit -m "Update expected test outputs"
+            git push
+          fi

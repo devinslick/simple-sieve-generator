@@ -40,6 +40,34 @@ This application **does not** include built-in authentication. By default, anyon
 
 3. Open your browser at `http://localhost:8787` (or similar).
 
+### Testing
+
+The project includes a test framework for the `/generate` endpoint.
+
+**Running tests locally:**
+
+1. Start the development server in one terminal:
+   ```bash
+   npm run dev
+   ```
+
+2. In another terminal, run the tests:
+   ```bash
+   npm run test:generate
+   ```
+
+**Test options:**
+- `--filter=NAME` - Run only tests matching NAME
+- `--update-expected` - Update expected output files with actual results
+
+**Adding new tests:**
+1. Add a test definition to `tests/generate/test-config.json`
+2. Create an input file with DSL rules (e.g., `my-test.input`)
+3. Run `npm run test:generate -- --update-expected --filter=my-test` to generate expected output
+4. Review the generated `.expected` file for correctness
+
+See `tests/README.md` for more details.
+
 ### Configuration & Deployment
 
 This project uses GitHub Actions for deployment. All sensitive configuration values (like API tokens and KV IDs) are securely stored in **GitHub Secrets**, not in the source code.
