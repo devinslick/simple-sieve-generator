@@ -432,7 +432,7 @@ app.get('/', (c) => {
                 if (document.getElementById('flagB').checked) flags += 'B';
                 const label = document.getElementById('newRuleLabel').value.trim();
                 // Use &label& token for designated label; do not emit legacy 'D' flag.
-                if (label) flags += '!' + label + '!';
+                if (label) flags += '&' + label + '&';
 
                 if (!flags) flags = 'F'; // Default to File
 
@@ -696,23 +696,53 @@ app.get('/legend', async (c) => {
     <html>
     <body style="font-family: sans-serif; padding: 2rem; max-width: 800px; margin: 0 auto;">
         <h1>Sieve Generator Legend</h1>
-        <p><strong>Syntax Overview:</strong></p>
+        <p><strong>Syntax Format:</strong> <code>[SCOPE] [TYPE] [ACTION] [PATTERN]</code></p>
+
+        <h3>Syntax Overview</h3>
         <ul>
-            <li><code>!alias1,alias2!CODE [Args]</code> - Alias Rules (Forwarded to you)</li>
-            <li><code>!</code> - Start Scoped Section (Applies to emails delivered to <em>Folder Name</em>)</li>
-            <li><code>global</code> - Start Global Section (Applies to all emails)</li>
-            <li><code>Subject String CODE</code> - Subject Rule</li>
-            <li><code>^sender@example.com^ CODE</code> - Sender Rule</li>
+            <li><code>!alias1,alias2!CODE [Subject]</code> - Alias Rules (match destination mailbox + optional subject filter)</li>
+            <li><code>!</code> or <code>scoped</code> - Start Scoped Section (applies only to emails delivered to <em>Folder Name</em>)</li>
+            <li><code>global</code> - Start Global Section (applies to all emails)</li>
+            <li><code>Subject Text CODE</code> - Subject Rule</li>
+            <li><code>^sender@example.com^ CODE [Subject]</code> - Sender Rule (with optional subject filter)</li>
         </ul>
-        <p><strong>Codes:</strong></p>
+
+        <h3>Action Codes</h3>
         <ul>
-            <li><code>F</code> - Default (File into Folder)</li>
-            <li><code>FR</code> - Read (File + Mark Read)</li>
-            <li><code>FRS</code> - Read Stop (File + Read + Stop Processing)</li>
-            <li><code>FRA</code> - Read Archive (File + Read + Archive)</li>
-            <li><code>FRAS</code> - Read Archive Stop</li>
+            <li><code>F</code> - FileInto (move to folder)</li>
+            <li><code>R</code> - Read (mark as seen)</li>
+            <li><code>A</code> - Archive (copy to Archive folder)</li>
+            <li><code>S</code> - Stop (halt further processing)</li>
             <li><code>B</code> - Bounce/Reject</li>
-            <li><code>FRASD [Label]</code> - Custom Label (File to [Label], Mark Read, Archive, Stop)</li>
+            <li><code>&amp;label&amp;</code> - Designated Label (file into custom folder)</li>
+            <li><code>x[N][u]</code> - Expire (x1=1 day, x6h=6 hours, x30d=30 days)</li>
+        </ul>
+
+        <h3>Common Combinations</h3>
+        <ul>
+            <li><code>F</code> - File into folder</li>
+            <li><code>FR</code> - File + Mark Read</li>
+            <li><code>FRS</code> - File + Read + Stop</li>
+            <li><code>FRA</code> - File + Read + Archive</li>
+            <li><code>FRAS</code> - File + Read + Archive + Stop</li>
+            <li><code>Fx1</code> - File + Expire in 1 day</li>
+            <li><code>Fx6h</code> - File + Expire in 6 hours</li>
+        </ul>
+
+        <h3>Pattern Matching</h3>
+        <ul>
+            <li>Use <code>*</code> or <code>?</code> for wildcard matching</li>
+            <li>Without wildcards, uses substring matching</li>
+        </ul>
+
+        <h3>Examples</h3>
+        <ul>
+            <li><code>F Your Order Shipped</code> - File emails with subject containing "Your Order Shipped"</li>
+            <li><code>FR Daily Digest</code> - File + mark read</li>
+            <li><code>^info@example.com^ FRS</code> - Match sender, file, read, stop</li>
+            <li><code>!auto,receipts!FRAS *</code> - Alias rule for multiple mailboxes</li>
+            <li><code>Fx1 Verification Code</code> - File + expire in 1 day</li>
+            <li><code>&amp;CustomFolder&amp;FR Subject Text</code> - File to custom folder</li>
         </ul>
     </body>
     </html>
@@ -738,8 +768,8 @@ function parseDSL(token) {
     let label = null;
     let expireRaw = null;
     
-    // Extract inline label: !label!
-    const labelMatch = temp.match(/!([\w-]+)!/);
+    // Extract inline label: &label&
+    const labelMatch = temp.match(/&([\w-]+)&/);
     if (labelMatch) {
          label = labelMatch[1];
          temp = temp.replace(labelMatch[0], '');
@@ -1451,30 +1481,7 @@ function getActionBody(suffix, ruleName) {
         return s.trim();
     }
 
-    // Legacy fallback (Shouldn't be hit with new parser)
-    if (suffix === 'default') return `fileinto "${ruleName}";`;
-    if (suffix === 'read') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";`;
-
-    if (suffix === 'read-stop') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  stop;`;
-    if (suffix === 'read-archive') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";`;
-    if (suffix === 'read-archive-stop') return `fileinto "${ruleName}";\n  addflag "\\\\Seen";\n  fileinto "archive";\n  stop;`;
-    if (suffix === 'expire') return `fileinto "${ruleName}";\n  expire "day" "1";\n  stop;`;
-    if (suffix && suffix.startsWith('expire:')) {
-        const parts = suffix.split(':');
-        const num = parts[1];
-        const unit = parts[2];
-        const isRead = parts[3] === 'read';
-        
-        let codeBlock = `fileinto "${ruleName}";`;
-        if (isRead) codeBlock += `\n  addflag "\\\\Seen";`;
-        codeBlock += `\n  expire "${unit}" "${num}";\n  stop;`;
-        return codeBlock;
-    }
-    if (suffix === 'reject') return `reject "This message was rejected by the mail delivery system.";\n  stop;`;
-    if (suffix && suffix.startsWith('fsd:')) {
-        const label = suffix.substring(4).trim();
-        return `fileinto "${label}";\n  stop;`;
-    }
+    // Fallback for unknown suffix formats - default to simple fileinto
     return `fileinto "${ruleName}";`;
 }
 

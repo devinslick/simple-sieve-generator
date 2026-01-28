@@ -8,8 +8,10 @@
 ### 1. SCOPE (Optional)
 Determines *where* the rule applies.
 - **(No Prefix)**: **Global**. Applies to all emails delivered to the account, unless guarded by specific "Delivered-To" logic in the template.
-- **`!`**: **Scoped**. Applies **only** if the email was originally addressed to the specific mailbox (e.g., `auto`, `alert`).
-  - Example: `!> Subject Text` -> Matches only if header `X-Original-To` is `auto` (assuming we are in `auto` rule).
+- **`!`** or **`scoped`**: **Scoped**. Applies **only** if the email was originally addressed to the specific mailbox (e.g., `auto`, `alert`).
+  - Example: `!F Subject Text` -> Matches only if header `X-Original-To` matches the folder name.
+- **`global`**: Switch back to **Global** scope after entering scoped mode.
+  - Example: Use `global` on a line by itself to return to global scope for subsequent rules.
 
 ### 2. TYPE (Optional)
 Determines *what part* of the email header to check.
@@ -61,9 +63,10 @@ The text to match against the header.
 Defines a list of aliased addresses that should target this rule folder using `X-Original-To`.
 
 *   **Syntax**: `!alias1,alias2,...!CODE [PATTERN]`
-*   **Example**: `!auto,credit,receipts!FRAS *`
-    *   **Meaning**: If email is sent to `auto` OR `credit` OR `receipts`, apply action `FRAS`.
-    *   **Note**: The **PATTERN** is currently ignored for Alias rules. These rules are designed for **Mailbox Routing**.
+*   **Example (no filter)**: `!auto,credit,receipts!FRAS` - Match any email to these mailboxes.
+*   **Example (with filter)**: `!auto,credit!FR Order Confirmation` - Match emails to these mailboxes with subject containing "Order Confirmation".
+    *   **Meaning**: If email is sent to `auto` OR `credit` OR `receipts`, apply the action. Optional PATTERN filters by subject.
+    *   **Note**: When PATTERN is provided, alias rules also check the Subject header. Use `*` as a wildcard pattern to match any subject.
 
 ### 6. DESIGNATED LABELS (Preferred: `&label&`)
 Use the `&...&` token to explicitly designate a label/folder for the rule to file into. This replaces the legacy `D`/`FRASD` conventions.
@@ -82,9 +85,9 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 
 | Rule Line | Explanation |
 | :--- | :--- |
-| `F Your Order Shipped` | **Global Subject**. Moves to folder if subject contains text. Stops. |
-| `FR Daily Digest` | **Global Subject**. Moves to folder, marks as **Read**. Stops. |
-| `FRAS Security Alert` | **Global Subject**. Moves to folder, marks **Read**, copies to **Archive**. Stops. |
+| `F Your Order Shipped` | **Global Subject**. Moves to folder if subject contains text. |
+| `FR Daily Digest` | **Global Subject**. Moves to folder, marks as **Read**. |
+| `FRAS Security Alert` | **Global Subject**. Moves to folder, marks **Read**, copies to **Archive**, stops processing. |
 | `B Buy Now` | **Global Subject**. **Rejects/Bounces** the email. |
 | `^sender@example.com^ FR Subject` | **Global From**. Matches sender and subject. |
 | `^info@example.com^ FRS` | **Global From**. Moves to folder if sender matches. Marks Read. Stops. |
