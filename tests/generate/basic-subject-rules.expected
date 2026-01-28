@@ -1,4 +1,4 @@
-# Generated Sieve Script for Shopping
+# Generated Sieve Script for basic-subject-rules
 require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
 
 # Generated: Do not run this script on spam messages
@@ -10,41 +10,46 @@ if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value 
 
 # Global | Subject | auto:F
 if anyof (
-  header :comparator "i;unicode-casemap" :contains "Subject" ["Your Order Shipped"]
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule1", "Rule 1"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Another Rule 1*"]
 ) {
-  fileinto "Shopping";
+  fileinto "basic-subject-rules";
 }
 
 # Global | Subject | auto:F_R
 if anyof (
-  header :comparator "i;unicode-casemap" :contains "Subject" ["Daily Digest"]
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule2", "Rule 2"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Another Rule 2*"]
 ) {
   addflag "\\Seen";
-  fileinto "Shopping";
+  fileinto "basic-subject-rules";
 }
 
-# Global | Subject | auto:F_R_S
+# Global | Subject | auto:F_R_A
 if anyof (
-  header :comparator "i;unicode-casemap" :contains "Subject" ["Newsletter"]
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule3", "Rule 3"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Another Rule 3*"]
 ) {
   addflag "\\Seen";
-  fileinto "Shopping";
-  stop;
+  fileinto "Archive";
+  fileinto "basic-subject-rules";
 }
 
 # Global | Subject | auto:F_R_A_S
 if anyof (
-  header :comparator "i;unicode-casemap" :contains "Subject" ["Security Alert"]
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule4", "Rule 4"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Another Rule 4*"]
 ) {
   addflag "\\Seen";
   fileinto "Archive";
-  fileinto "Shopping";
+  fileinto "basic-subject-rules";
   stop;
 }
 
 # Global | Subject | auto:B
 if anyof (
-  header :comparator "i;unicode-casemap" :contains "Subject" ["Buy Now Limited Time"]
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule5", "Rule 5"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Another Rule5*"]
 ) {
   reject "Message Rejected";
   stop;
@@ -52,8 +57,33 @@ if anyof (
 
 # Global | Subject | auto:F_X-1-d
 if anyof (
-  header :comparator "i;unicode-casemap" :contains "Subject" ["Verification Code"]
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule6", "Rule 6"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Another Rule 6*"]
 ) {
   expire "day" "1";
-  fileinto "Shopping";
+  fileinto "basic-subject-rules";
 }
+
+# Global | Subject | auto:F_R_A_S_X-7-d
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule7"]
+) {
+  addflag "\\Seen";
+  expire "day" "7";
+  fileinto "Archive";
+  fileinto "basic-subject-rules";
+  stop;
+}
+
+# Global | Subject | auto:F_R_A_S_X-3-d
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Rule 7"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Another Rule 7*"]
+) {
+  addflag "\\Seen";
+  expire "day" "3";
+  fileinto "Archive";
+  fileinto "basic-subject-rules";
+  stop;
+}
+

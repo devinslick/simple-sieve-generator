@@ -1,0 +1,10 @@
+# Aliases | auto:F
+!mailbox1!F
+!mailbox2,mailbox3!F
+# Aliases (Filtered) | auto:F
+!mailbox4!F Subject1
+!mailbox4!F Subject1 2
+# Aliases (Filtered) | auto:F_R_A_S
+!mailbox4!FRAS Subject2
+!mailbox4!FRAS Subject2 2
+!mailbox5!FRAS Subject3

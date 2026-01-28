@@ -963,15 +963,15 @@ function parseRulesList(rawText) {
             }
 
             if (matchArgs && matchArgs.length > 0) {
-                 // Group by (Suffix + Alias-Set) to allow combining multiple filters for same alias
-                 const aliasKey = aliases.sort().join(',');
+                 // Group by Suffix only (not alias set) to allow combining rules with same action
                  // Append extras (from/label) encoded into key so generator can include additional conditions
                  let extras = '';
                  if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
                  if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
-                 const key = `aliases-filtered:${suffix}###${aliasKey}${extras}`;
+                 const key = `aliases-filtered:${suffix}${extras}`;
                  if (!buckets[key]) buckets[key] = [];
-                 buckets[key].push(matchArgs);
+                 // Store both aliases and filter so they can be combined across different alias sets
+                 buckets[key].push({ aliases, filter: matchArgs });
              } else {
                  let extras = '';
                  if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
@@ -1033,13 +1033,21 @@ function parseRulesList(rawText) {
              matchString = currentLine.substring(first.length).trim();
         }
         
+        // For from-rules, a standalone wildcard "*" matches everything and is redundant,
+        // so treat it as empty to create a from-only rule instead of a from+subject rule
+        let item = matchString.trim();
+        if (type === 'from' && item === '*') {
+            item = '';
+        }
+
         // Build key, including any extracted tokens as extras so generator can add corresponding conditions
+        // For from-only rules (no subject filter), don't include from in extras so rules can be combined
         let extras = '';
-        if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
+        const isFromOnlyRule = type === 'from' && !item;
+        if (fromToken && !isFromOnlyRule) extras += `::from=${encodeURIComponent(fromToken)}`;
         if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
         const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
         if (!buckets[key]) buckets[key] = [];
-        const item = matchString.trim();
 
         if (item) {
             buckets[key].push(item);
@@ -1104,15 +1112,14 @@ function generateSieveScript(folderName, buckets) {
     // --- ALIASES ---
     // 1. Filtered Aliases (Specific rules first)
     const aliasFilteredKeys = Object.keys(buckets).filter(k => k.startsWith('aliases-filtered:'));
-    
+
     if (aliasFilteredKeys.length > 0) {
         script += `# --- ALIAS RULES (FILTERED) ---\n\n`;
         for (const key of aliasFilteredKeys) {
             const part = key.substring('aliases-filtered:'.length);
             const [mainPart, ...extraParts] = part.split('::');
-            const [suffix, aliasStr] = mainPart.split('###');
-            const aliasList = aliasStr.split(',').map(a => `"${a}"`).join(', ');
-            
+            const suffix = mainPart;
+
             // parse extras
             const extras = {};
             for (const e of extraParts) {
@@ -1120,14 +1127,25 @@ function generateSieveScript(folderName, buckets) {
                 if (k && v) extras[k] = decodeURIComponent(v);
             }
 
-            const filters = buckets[key];
-            const { contains: subjectContains, matches: subjectMatches } = splitMatches(filters);
-            
+            // Collect all unique aliases and filters from bucket items
+            const items = buckets[key];
+            const allAliases = new Set();
+            const allFilters = new Set();
+            for (const item of items) {
+                for (const alias of item.aliases) {
+                    allAliases.add(alias);
+                }
+                allFilters.add(item.filter);
+            }
+
+            const aliasList = Array.from(allAliases).map(a => `"${a}"`).join(', ');
+            const { contains: subjectContains, matches: subjectMatches } = splitMatches(Array.from(allFilters));
+
             const subjectConditions = [];
             if (subjectContains.length) subjectConditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${subjectContains.join(', ')}]`);
             if (subjectMatches.length) subjectConditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${subjectMatches.join(', ')}]`);
-            
-            if (subjectConditions.length === 0) continue; 
+
+            if (subjectConditions.length === 0) continue;
             const subjectBlock = subjectConditions.length > 1 ? `anyof (\n    ${subjectConditions.join(',\n    ')}\n  )` : subjectConditions[0];
 
             // Build additional 'from' conditions if provided via extras
@@ -1148,8 +1166,8 @@ function generateSieveScript(folderName, buckets) {
             }
 
             let body = getActionBody(suffix, ruleName);
-            
-            script += `# Aliases (Filtered) | ${suffix} | ${aliasStr}\n`;
+
+            script += `# Aliases (Filtered) | ${suffix}\n`;
             script += `if allof (\n`;
             script += `  header :comparator "i;unicode-casemap" :contains "X-Original-To" [${aliasList}],\n`;
             script += `  header :contains "Delivered-To" ["@"],\n`;

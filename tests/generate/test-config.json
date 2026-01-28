@@ -3,21 +3,21 @@
     {
       "name": "basic-subject-rules",
       "description": "Basic subject matching rules with various action codes",
-      "folderName": "Shopping",
+      "folderName": "basic-subject-rules",
       "inputFile": "basic-subject-rules.input",
       "expectedFile": "basic-subject-rules.expected"
     },
     {
       "name": "from-rules",
       "description": "From/sender address matching rules",
-      "folderName": "Notifications",
+      "folderName": "from-rules",
       "inputFile": "from-rules.input",
       "expectedFile": "from-rules.expected"
     },
     {
       "name": "alias-rules",
       "description": "Alias-based routing rules",
-      "folderName": "Receipts",
+      "folderName": "alias-rules",
       "inputFile": "alias-rules.input",
       "expectedFile": "alias-rules.expected"
     }

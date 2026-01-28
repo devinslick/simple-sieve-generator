@@ -26,6 +26,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Debug repo state
+        run: |
+          echo "Checked out commit: $(git rev-parse HEAD)"
+          git --no-pager log -n 1 --pretty=oneline
+          echo "--- tests/generate/from-rules.input ---"
+          sed -n '1,200p' tests/generate/from-rules.input || true
+          echo "--- tests/generate/from-rules.expected (first 60 lines) ---"
+          sed -n '1,60p' tests/generate/from-rules.expected || true
+          echo "--- .wrangler directory listing ---"
+          ls -la .wrangler || true
+
       - name: Install dependencies
         run: npm install
 

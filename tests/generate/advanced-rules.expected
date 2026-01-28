@@ -1,0 +1,35 @@
+# Generated Sieve Script for test
+require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
+
+# Generated: Do not run this script on spam messages
+if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value "ge" :comparator "i;ascii-numeric" "${1}") {
+    return;
+}
+
+# --- ALIAS RULES (GENERIC) ---
+
+# Aliases | auto:F_L-label1
+if allof (
+  header :comparator "i;unicode-casemap" :contains "X-Original-To" ["mailbox1a@", "mailbox1b@"],
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "label1";
+}
+
+# Aliases | auto:F_L-${2}
+if allof (
+  header :comparator "i;unicode-casemap" :matches "X-Original-To" ["*+*@*"],
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "${2}";
+}
+
+# Aliases | auto:F_S_L-label3
+if allof (
+  header :comparator "i;unicode-casemap" :contains "X-Original-To" ["+mailbox3@"],
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "label3";
+  stop;
+}
+

@@ -1,7 +1,22 @@
 # Basic subject matching rules
-F Your Order Shipped
-FR Daily Digest
-FRS Newsletter
-FRAS Security Alert
-B Buy Now Limited Time
-Fx1 Verification Code
+Rule1
+F Rule 1
+F *Another Rule 1*
+FR Rule2
+FR Rule 2
+FR *Another Rule 2*
+FRA Rule3
+FRA Rule 3
+FRA *Another Rule 3*
+FRAS Rule4
+FRAS Rule 4
+FRAS *Another Rule 4*
+B Rule5
+B Rule 5
+B *Another Rule5*
+x1d Rule6
+x1d Rule 6
+x1d *Another Rule 6*
+FRASx7d Rule7
+FRASx3d Rule 7
+FRASx3d *Another Rule 7*
