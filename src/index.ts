@@ -1039,7 +1039,13 @@ function parseRulesList(rawText) {
         if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
         const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
         if (!buckets[key]) buckets[key] = [];
-        const item = matchString.trim();
+        let item = matchString.trim();
+
+        // For from-rules, a standalone wildcard "*" matches everything and is redundant,
+        // so treat it as empty to create a from-only rule instead of a from+subject rule
+        if (type === 'from' && item === '*') {
+            item = '';
+        }
 
         if (item) {
             buckets[key].push(item);
