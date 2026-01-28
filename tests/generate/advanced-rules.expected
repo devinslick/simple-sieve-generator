@@ -1,4 +1,4 @@
-# Generated Sieve Script for Shopping
+# Generated Sieve Script for Test
 require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
 
 # Generated: Do not run this script on spam messages
@@ -33,16 +33,13 @@ if allof (
   stop;
 }
 
-# --- GLOBAL RULES ---
-
-# Global | Subject | auto:F_R_A_S_L-label6_SZ-over-1-M
+# Aliases | auto:F_R_SZ-over-100-K
 if allof (
-  header :comparator "i;unicode-casemap" :contains "Subject" ["Subject"],
-  size :over "1M"
+  size :over "100K",
+  header :comparator "i;unicode-casemap" :contains "X-Original-To" ["+mailbox4@"],
+  header :contains "Delivered-To" ["@"]
 ) {
   addflag "\\Seen";
-  fileinto "Archive";
-  fileinto "label6";
-  stop;
+  fileinto "Test";
 }
 
