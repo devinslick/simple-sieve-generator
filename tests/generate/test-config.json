@@ -3,7 +3,7 @@
     {
       "name": "basic-subject-rules",
       "description": "Basic subject matching rules with various action codes",
-      "folderName": "Shopping",
+      "folderName": "basic-subject-rules",
       "inputFile": "basic-subject-rules.input",
       "expectedFile": "basic-subject-rules.expected"
     },
