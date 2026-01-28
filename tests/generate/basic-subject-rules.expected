@@ -42,7 +42,7 @@ if anyof (
   stop;
 }
 
-# Global | Subject | auto:F_B
+# Global | Subject | auto:B
 if anyof (
   header :comparator "i;unicode-casemap" :contains "Subject" ["Buy Now Limited Time"]
 ) {
