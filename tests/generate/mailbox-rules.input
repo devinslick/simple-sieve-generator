@@ -1,3 +1,4 @@
+# Filtered/scoped mailbox rules
 # Aliases | auto:F
 !mailbox1!F
 !mailbox2,mailbox3!F
