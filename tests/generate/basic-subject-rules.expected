@@ -86,3 +86,4 @@ if anyof (
   fileinto "basic-subject-rules";
   stop;
 }
+
