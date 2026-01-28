@@ -11,7 +11,7 @@
  *   --update-expected  Update expected files with actual output (use with caution)
  *   --filter=NAME      Run only tests matching NAME
  *
- * The script reads test-config.json for test definitions.
+ * The script reads test-config.json for test definitions
  * Each test has an input file (.input) and expected output file (.expected).
  */
 

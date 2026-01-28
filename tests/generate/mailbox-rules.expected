@@ -38,4 +38,3 @@ if allof (
 ) {
   fileinto "alias-rules";
 }
-

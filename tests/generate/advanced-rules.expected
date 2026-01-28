@@ -32,4 +32,3 @@ if allof (
   fileinto "label3";
   stop;
 }
-
