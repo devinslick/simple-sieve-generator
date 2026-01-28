@@ -17,7 +17,7 @@
     {
       "name": "alias-rules",
       "description": "Alias-based routing rules",
-      "folderName": "Receipts",
+      "folderName": "alias-rules",
       "inputFile": "alias-rules.input",
       "expectedFile": "alias-rules.expected"
     }
