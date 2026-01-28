@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const TEST_DIR = path.dirname(__filename);
-const CONFIG_FILE = path.join(TEST_DIR, 'test-config.json');
+// Test config discovery: look for all `*.input` files and derive test metadata
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -39,9 +39,33 @@ for (const arg of args) {
   }
 }
 
-async function loadConfig() {
-  const content = fs.readFileSync(CONFIG_FILE, 'utf8');
-  return JSON.parse(content);
+async function discoverTests() {
+  const files = fs.readdirSync(TEST_DIR).filter(f => f.endsWith('.input'));
+  const tests = [];
+  for (const file of files) {
+    const name = path.basename(file, '.input');
+    const inputPath = path.join(TEST_DIR, file);
+    let desc = 'No description';
+    try {
+      const content = fs.readFileSync(inputPath, 'utf8');
+      const firstLine = content.split(/\r?\n/).find(l => l.trim() !== '');
+      if (firstLine) desc = firstLine.replace(/^\s*#\s*/, '').trim();
+    } catch (e) {
+      // ignore and keep default description
+    }
+
+    tests.push({
+      name,
+      description: desc,
+      folderName: name,
+      inputFile: file,
+      expectedFile: `${name}.expected`
+    });
+  }
+
+  // Sort for deterministic order
+  tests.sort((a, b) => a.name.localeCompare(b.name));
+  return { tests };
 }
 
 async function loadFile(filename) {
@@ -176,12 +200,12 @@ async function main() {
     console.log(`Filter: ${options.filter}`);
   }
 
-  // Load config
+  // Discover tests by scanning `*.input` files
   let config;
   try {
-    config = await loadConfig();
+    config = await discoverTests();
   } catch (error) {
-    console.error(`Failed to load config: ${error.message}`);
+    console.error(`Failed to discover tests: ${error.message}`);
     process.exit(1);
   }
 
