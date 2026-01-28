@@ -1,0 +1,59 @@
+# Generated Sieve Script for Shopping
+require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
+
+# Generated: Do not run this script on spam messages
+if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value "ge" :comparator "i;ascii-numeric" "${1}") {
+    return;
+}
+
+# --- GLOBAL RULES ---
+
+# Global | Subject | auto:F
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Your Order Shipped"]
+) {
+  fileinto "Shopping";
+}
+
+# Global | Subject | auto:F_R
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Daily Digest"]
+) {
+  addflag "\\Seen";
+  fileinto "Shopping";
+}
+
+# Global | Subject | auto:F_R_S
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Newsletter"]
+) {
+  addflag "\\Seen";
+  fileinto "Shopping";
+  stop;
+}
+
+# Global | Subject | auto:F_R_A_S
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Security Alert"]
+) {
+  addflag "\\Seen";
+  fileinto "Archive";
+  fileinto "Shopping";
+  stop;
+}
+
+# Global | Subject | auto:F_B
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Buy Now Limited Time"]
+) {
+  reject "Message Rejected";
+  stop;
+}
+
+# Global | Subject | auto:F_X-1-d
+if anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Verification Code"]
+) {
+  expire "day" "1";
+  fileinto "Shopping";
+}

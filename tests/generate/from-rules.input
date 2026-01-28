@@ -1,0 +1,5 @@
+# From/sender matching rules
+^noreply@amazon.com^ F
+^notifications@github.com^ FR
+^alerts@bank.com^ FRS
+^*@newsletter.example.com^ FRAS
