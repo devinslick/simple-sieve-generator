@@ -763,30 +763,43 @@ app.post('/generate', async (c) => {
 
 function parseDSL(token) {
     if (!token) return null;
-    
+
     let temp = token;
     let label = null;
     let expireRaw = null;
-    
+    let sizeRaw = null;
+
     // Extract inline label: &label&
     const labelMatch = temp.match(/&([\w-]+)&/);
     if (labelMatch) {
          label = labelMatch[1];
          temp = temp.replace(labelMatch[0], '');
     }
-    
+
+    // Extract size filter: [>100K] or [<100K]
+    // Supports K, M, G units (case-insensitive)
+    const sizeMatch = temp.match(/\[([><])(\d+)([KMGkmg])\]/);
+    if (sizeMatch) {
+        sizeRaw = {
+            op: sizeMatch[1] === '>' ? 'over' : 'under',
+            val: sizeMatch[2],
+            unit: sizeMatch[3].toUpperCase()
+        };
+        temp = temp.replace(sizeMatch[0], '');
+    }
+
     // Extract expiration: xN[dh]
     const expireMatch = temp.match(/x(\d+)([dh]?)/i);
     if (expireMatch) {
         expireRaw = { val: expireMatch[1], unit: expireMatch[2] };
         temp = temp.replace(expireMatch[0], '');
     }
-    
-    // Check for "fsd:..." legacy pattern if token started with "fsd:"? 
+
+    // Check for "fsd:..." legacy pattern if token started with "fsd:"?
     // No, standard loop splits by space. "fsd:label" is one token?
     // User syntax "FRASD label" is separate. "FSD label" is separate.
     // If token is "FSD", it is solely F,S,D flags.
-    
+
     // Verify remaining characters are only flags [F, R, A, S, B]
     // (Legacy `D` flag removed; use &label& token instead.)
     if (temp.length > 0 && !/^[frasb]+$/i.test(temp)) {
@@ -800,7 +813,7 @@ function parseDSL(token) {
         S: /s/i.test(temp),
         B: /b/i.test(temp)
     };
-    
+
     // Legacy support: "F" implies File. "B" implies Reject.
     // If ONLY Expiration was matched (e.g. "x1h"), assume File?
     // "x1h" -> temp="" -> flags.F = false.
@@ -814,30 +827,31 @@ function parseDSL(token) {
     // "FRA" -> File + Read + Archive.
     // "RA" -> Read + Archive (Maybe no File?).
     // "x1h" -> Expire + File?
-    
+
     // Let's rely on explicit 'F' in token OR defaults.
     // If token matched standard code logic before (e.g. "FR"), it had F.
     // If "x1h", previously it was FX1h -> F is explicit.
     // If user types "x2h", is that valid? Matches logic.
-    // Let's assume File is implicit if not Rejected/Bounced, 
+    // Let's assume File is implicit if not Rejected/Bounced,
     // OR we only set F if 'f' is in string.
     // BUT! The user said "AFx2h". Explicit A, F.
     // If they type "Ax2h", maybe they don't want File?
     // I will stick to explicit parsing.
-    
+
     return {
         flags,
         expire: expireRaw,
         label,
-        hasFlags: (temp.length > 0 || label !== null || expireRaw !== null)
+        size: sizeRaw,
+        hasFlags: (temp.length > 0 || label !== null || expireRaw !== null || sizeRaw !== null)
     };
 }
 
 function canonicalSuffix(dsl) {
     if (!dsl) return 'default';
-    
+
     const parts = [];
-    
+
     // Auto-set F (File) if not Reject/Bounce.
     // This handles "Ax2h" vs "AFx2h" deduplication.
     const hasF = dsl.flags.F || !dsl.flags.B;
@@ -850,21 +864,26 @@ function canonicalSuffix(dsl) {
     if (dsl.flags.B) parts.push('B');
     // 'D' (designate) is deprecated; labels should be provided via &label& token and
     // will be encoded as an `L-<label>` part below.
-    
+
     // Expire
     if (dsl.expire) {
         const u = (dsl.expire.unit || 'd').toLowerCase().startsWith('h') ? 'h' : 'd';
         parts.push(`X-${dsl.expire.val}-${u}`);
     }
-    
+
     // Label
     if (dsl.label) {
         parts.push(`L-${dsl.label}`);
     }
-    
+
+    // Size filter: encode as SZ-over-100-K or SZ-under-1-M
+    if (dsl.size) {
+        parts.push(`SZ-${dsl.size.op}-${dsl.size.val}-${dsl.size.unit}`);
+    }
+
     if (parts.length === 0) return 'default'; // Should match explicit "F"? No F is flag.
     // If empty (e.g. code ""), default.
-    
+
     return 'auto:' + parts.join('_');
 }
 
@@ -881,9 +900,10 @@ function parseRulesList(rawText) {
         line = line.trim();
         if (!line || line.startsWith('#')) continue;
 
-        // New DSL tokens (preferred): extract ^from^ and &label& tokens anywhere in the line
+        // New DSL tokens (preferred): extract ^from^, &label&, and [>SIZE]/[<SIZE] tokens anywhere in the line
         let fromToken = null;
         let labelToken = null;
+        let sizeToken = null;
         const fromRe = line.match(/\^([^\^]+)\^/);
         if (fromRe) {
             fromToken = fromRe[1].trim();
@@ -893,6 +913,16 @@ function parseRulesList(rawText) {
         if (labelRe) {
             labelToken = labelRe[1].trim();
             line = line.replace(labelRe[0], '').trim();
+        }
+        // Extract size filter token: [>100K] or [<100K]
+        const sizeRe = line.match(/\[([><])(\d+)([KMGkmg])\]/);
+        if (sizeRe) {
+            sizeToken = {
+                op: sizeRe[1] === '>' ? 'over' : 'under',
+                val: sizeRe[2],
+                unit: sizeRe[3].toUpperCase()
+            };
+            line = line.replace(sizeRe[0], '').trim();
         }
 
         // Alias Logic
@@ -931,6 +961,13 @@ function parseRulesList(rawText) {
                  const l = rest.match(/&([^&]+)&/);
                  if (l) { labelToken = l[1].trim(); rest = rest.replace(l[0], '').trim(); }
              }
+             if (!sizeToken) {
+                 const sz = rest.match(/\[([><])(\d+)([KMGkmg])\]/);
+                 if (sz) {
+                     sizeToken = { op: sz[1] === '>' ? 'over' : 'under', val: sz[2], unit: sz[3].toUpperCase() };
+                     rest = rest.replace(sz[0], '').trim();
+                 }
+             }
 
              if (dslFirst && dslFirst.hasFlags) {
                  dsl = dslFirst;
@@ -950,6 +987,15 @@ function parseRulesList(rawText) {
                  }
              }
 
+             // If a size token was provided, merge it into the DSL
+             if (sizeToken) {
+                 if (!dsl) {
+                     dsl = { flags: { F: true, R: false, A: false, S: false, B: false }, expire: null, label: labelToken, size: sizeToken, hasFlags: true };
+                 } else {
+                     dsl.size = dsl.size || sizeToken;
+                 }
+             }
+
              if (dsl) {
                  suffix = canonicalSuffix(dsl);
              }
@@ -964,10 +1010,11 @@ function parseRulesList(rawText) {
 
             if (matchArgs && matchArgs.length > 0) {
                  // Group by Suffix only (not alias set) to allow combining rules with same action
-                 // Append extras (from/label) encoded into key so generator can include additional conditions
+                 // Append extras (from/label/size) encoded into key so generator can include additional conditions
                  let extras = '';
                  if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
                  if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
+                 if (sizeToken) extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
                  const key = `aliases-filtered:${suffix}${extras}`;
                  if (!buckets[key]) buckets[key] = [];
                  // Store both aliases and filter so they can be combined across different alias sets
@@ -976,6 +1023,7 @@ function parseRulesList(rawText) {
                  let extras = '';
                  if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
                  if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
+                 if (sizeToken) extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
                  const key = 'aliases:' + suffix + extras;
                  if (!buckets[key]) buckets[key] = [];
                  buckets[key].push(...aliases);
@@ -1008,44 +1056,74 @@ function parseRulesList(rawText) {
             currentLine = currentLine.substring(7).trim();
         }
 
-        let type = 'subject';
-        if (fromToken) type = 'from';
-
+        // Type will be determined after we know if there's a subject item
         // Parse Code from Rule Line
         // "Subject String CODE" or "CODE Subject String"
         let bucketSuffix = 'auto:F'; // Default to File
-        
+
         const parts = currentLine.split(/\s+/);
         const first = parts[0];
         const last = parts.length > 0 ? parts[parts.length - 1] : '';
-        
-        const dslFirst = parseDSL(first);
-        const dslLast = parseDSL(last);
-        
+
+        let dslFirst = parseDSL(first);
+        let dslLast = parseDSL(last);
+
         let matchString = currentLine;
-        
+        let dsl = null;
+
         // Prefer LAST if valid (standard "Pattern CODE")
         if (dslLast && dslLast.hasFlags) {
-             bucketSuffix = canonicalSuffix(dslLast);
+             dsl = dslLast;
              matchString = currentLine.substring(0, currentLine.length - last.length).trim();
         } else if (dslFirst && dslFirst.hasFlags) {
-             bucketSuffix = canonicalSuffix(dslFirst);
+             dsl = dslFirst;
              matchString = currentLine.substring(first.length).trim();
         }
-        
+
+        // Merge extracted tokens into DSL
+        if (labelToken) {
+            if (!dsl) {
+                dsl = { flags: { F: true, R: false, A: false, S: false, B: false }, expire: null, label: labelToken, size: null, hasFlags: true };
+            } else {
+                dsl.label = dsl.label || labelToken;
+            }
+        }
+        if (sizeToken) {
+            if (!dsl) {
+                dsl = { flags: { F: true, R: false, A: false, S: false, B: false }, expire: null, label: labelToken, size: sizeToken, hasFlags: true };
+            } else {
+                dsl.size = dsl.size || sizeToken;
+            }
+        }
+
+        if (dsl) {
+            bucketSuffix = canonicalSuffix(dsl);
+        }
+
+        // Determine item (subject pattern)
+        let item = matchString.trim();
         // For from-rules, a standalone wildcard "*" matches everything and is redundant,
         // so treat it as empty to create a from-only rule instead of a from+subject rule
-        let item = matchString.trim();
-        if (type === 'from' && item === '*') {
+        if (fromToken && item === '*') {
             item = '';
         }
 
+        // Determine type based on whether we have a from token and/or subject item
+        // from-only rules -> type='from', items are from patterns
+        // from+subject rules -> type='subject', from goes in extras
+        // subject-only rules -> type='subject'
+        let type = 'subject';
+        if (fromToken && !item) {
+            type = 'from';
+        }
+
         // Build key, including any extracted tokens as extras so generator can add corresponding conditions
-        // For from-only rules (no subject filter), don't include from in extras so rules can be combined
+        // For from+subject rules, include from in extras so the subject bucket can add from conditions
+        // For from-only rules, from is NOT in extras (type='from' with items as from patterns)
         let extras = '';
-        const isFromOnlyRule = type === 'from' && !item;
-        if (fromToken && !isFromOnlyRule) extras += `::from=${encodeURIComponent(fromToken)}`;
+        if (fromToken && type === 'subject') extras += `::from=${encodeURIComponent(fromToken)}`;
         if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
+        if (sizeToken) extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
         const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
         if (!buckets[key]) buckets[key] = [];
 
@@ -1088,9 +1166,24 @@ function generateSieveScript(folderName, buckets) {
         const extras = {};
         for (const e of extraParts) {
             const [k, v] = e.split('=');
-            if (k && v) extras[k] = decodeURIComponent(v);
+            if (k && v) {
+                if (k === 'size') {
+                    // size is in format: over-100-K or under-1-M
+                    const [op, val, unit] = v.split('-');
+                    extras.size = { op, val, unit };
+                } else {
+                    extras[k] = decodeURIComponent(v);
+                }
+            }
         }
         return extras;
+    };
+
+    // Helper to build a size condition from extras
+    const buildSizeCondition = (extras) => {
+        if (!extras.size) return null;
+        const { op, val, unit } = extras.size;
+        return `size :${op} "${val}${unit}"`;
     };
 
     const buildFromConditions = (patterns) => {
@@ -1165,6 +1258,9 @@ function generateSieveScript(folderName, buckets) {
                 }
             }
 
+            // Build size condition if provided via extras
+            const sizeCondition = buildSizeCondition(extras);
+
             let body = getActionBody(suffix, ruleName);
 
             script += `# Aliases (Filtered) | ${suffix}\n`;
@@ -1174,6 +1270,10 @@ function generateSieveScript(folderName, buckets) {
             // include extra from conditions first if present
             if (extraConditions.length) {
                 script += `  ${extraConditions.join(',\n  ')},\n`;
+            }
+            // include size condition if present
+            if (sizeCondition) {
+                script += `  ${sizeCondition},\n`;
             }
             script += `  ${subjectBlock}\n`;
             script += `) {\n  ${body}\n}\n\n`;
@@ -1193,11 +1293,7 @@ function generateSieveScript(folderName, buckets) {
             if (!items.length) continue;
 
             // parse extras
-            const extras = {};
-            for (const e of extraParts) {
-                const [k, v] = e.split('=');
-                if (k && v) extras[k] = decodeURIComponent(v);
-            }
+            const extras = parseExtras(extraParts);
 
             const { contains, matches } = splitMatches(items);
             const conditions = [];
@@ -1225,6 +1321,9 @@ function generateSieveScript(folderName, buckets) {
                 }
             }
 
+            // Build size condition if provided via extras
+            const sizeCondition = buildSizeCondition(extras);
+
             let body = getActionBody(suffix, ruleName);
 
             script += `# Aliases | ${suffix}\n`;
@@ -1232,6 +1331,10 @@ function generateSieveScript(folderName, buckets) {
             // include extra from conditions first if present
             if (extraConditions.length) {
                 script += `  ${extraConditions.join(',\n  ')},\n`;
+            }
+            // include size condition if present
+            if (sizeCondition) {
+                script += `  ${sizeCondition},\n`;
             }
             script += `  ${matchBlock},\n  header :contains "Delivered-To" ["@"]\n) {\n  ${body}\n}\n\n`;
         }
@@ -1247,10 +1350,7 @@ function generateSieveScript(folderName, buckets) {
             const part = key.substring('global-subject-'.length);
             const [mainPart, ...extraParts] = part.split('::');
             const suffix = mainPart;
-            const extras = {};
-            for (const e of extraParts) {
-                const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v);
-            }
+            const extras = parseExtras(extraParts);
             const items = buckets[key];
             if (!items.length) continue;
             const { contains, matches } = splitMatches(items);
@@ -1259,24 +1359,39 @@ function generateSieveScript(folderName, buckets) {
             if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
             if (conditions.length === 0) continue;
 
-            // If extras.from present, require both subject AND from conditions
+            // Build size condition if provided via extras
+            const sizeCondition = buildSizeCondition(extras);
+
+            // If extras.from or extras.size present, use allof to require all conditions
             let body = getActionBody(suffix, ruleName);
             script += `# Global | Subject | ${suffix}\n`;
-            if (extras.from) {
-                const fromPatterns = [extras.from];
-                const fm = splitMatches(fromPatterns);
-                const fromConds = [];
-                if (fm.contains.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
-                if (fm.matches.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
-                if (fm.contains.length) fromConds.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
-                if (fm.matches.length) {
-                    const headerMatches = fm.matches.map(m => { const clean = m.substring(1, m.length - 1); return `"*${clean}*"`; });
-                    fromConds.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
-                }
-                if (fromConds.length === 0) continue;
+            if (extras.from || sizeCondition) {
+                const allofConditions = [];
                 const subjectBlock = conditions.length > 1 ? `anyof (\n  ${conditions.join(',\n  ')}\n)` : conditions[0];
-                const fromBlock = fromConds.length > 1 ? `anyof (\n  ${fromConds.join(',\n  ')}\n)` : fromConds[0];
-                script += `if allof (\n  ${subjectBlock},\n  ${fromBlock}\n) {\n  ${body}\n}\n\n`;
+                allofConditions.push(subjectBlock);
+
+                if (extras.from) {
+                    const fromPatterns = [extras.from];
+                    const fm = splitMatches(fromPatterns);
+                    const fromConds = [];
+                    if (fm.contains.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+                    if (fm.matches.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+                    if (fm.contains.length) fromConds.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+                    if (fm.matches.length) {
+                        const headerMatches = fm.matches.map(m => { const clean = m.substring(1, m.length - 1); return `"*${clean}*"`; });
+                        fromConds.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                    }
+                    if (fromConds.length > 0) {
+                        const fromBlock = fromConds.length > 1 ? `anyof (\n  ${fromConds.join(',\n  ')}\n)` : fromConds[0];
+                        allofConditions.push(fromBlock);
+                    }
+                }
+
+                if (sizeCondition) {
+                    allofConditions.push(sizeCondition);
+                }
+
+                script += `if allof (\n  ${allofConditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
             } else {
                 script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
             }
@@ -1287,44 +1402,39 @@ function generateSieveScript(folderName, buckets) {
             const suffix = mainPart;
             const extras = parseExtras(extraParts);
             const items = buckets[key];
+            if (!items.length) continue;
+            const { contains, matches } = splitMatches(items);
+            const conditions = [];
 
-            // Case: both a Subject (items) and an extras.from -> require both Subject AND From
-            // But skip this if items are actually the same single from-token (from-only rule)
-            if (extras.from && items && items.length && !(items.length === 1 && items[0] === extras.from)) {
-                const { contains, matches } = splitMatches(items);
-                const subjectConds = [];
-                if (contains.length) subjectConds.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
-                if (matches.length) subjectConds.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
-                if (subjectConds.length === 0) continue;
+            // 1. Check standard "From" header using address test
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
 
-                const fromConds = buildFromConditions([extras.from]);
-                if (fromConds.length === 0) continue;
-
-                const subjectBlock = subjectConds.length > 1 ? `anyof (\n  ${subjectConds.join(',\n  ')}\n)` : subjectConds[0];
-                const fromBlock = fromConds.length > 1 ? `anyof (\n  ${fromConds.join(',\n  ')}\n)` : fromConds[0];
-                let body = getActionBody(suffix, ruleName);
-                script += `# Global | From+Subject | ${suffix}\n`;
-                script += `if allof (\n  ${subjectBlock},\n  ${fromBlock}\n) {\n  ${body}\n}\n\n`;
-                continue;
+            // 2. Check "X-Simplelogin-Original-From" as a text header
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
+            if (matches.length) {
+                // For header matching, we need to wrap the pattern in wildcards to match the full header string
+                // e.g. "Name <email>" needs "*email*"
+                const headerMatches = matches.map(m => {
+                    const clean = m.substring(1, m.length - 1); // remove quotes
+                    return `"*${clean}*"`;
+                });
+                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
             }
 
-            // Case: items represent from patterns
-            if (items && items.length) {
-                const conditions = buildFromConditions(items);
-                if (conditions.length === 0) continue;
-                let body = getActionBody(suffix, ruleName);
-                script += `# Global | From | ${suffix}\n`;
+            if (conditions.length === 0) continue;
+
+            // Build size condition if provided via extras
+            const sizeCondition = buildSizeCondition(extras);
+
+            let body = getActionBody(suffix, ruleName);
+            script += `# Global | From | ${suffix}\n`;
+
+            if (sizeCondition) {
+                const fromBlock = conditions.length > 1 ? `anyof (\n  ${conditions.join(',\n  ')}\n)` : conditions[0];
+                script += `if allof (\n  ${fromBlock},\n  ${sizeCondition}\n) {\n  ${body}\n}\n\n`;
+            } else {
                 script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
-                continue;
-            }
-
-            // Case: fallback to extras.from alone
-            if (extras.from) {
-                const fromConds = buildFromConditions([extras.from]);
-                if (fromConds.length === 0) continue;
-                let body = getActionBody(suffix, ruleName);
-                script += `# Global | From | ${suffix}\n`;
-                script += `if anyof (\n  ${fromConds.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
             }
         }
     }
@@ -1342,34 +1452,49 @@ function generateSieveScript(folderName, buckets) {
             const part = key.substring('scoped-subject-'.length);
             const [mainPart, ...extraParts] = part.split('::');
             const suffix = mainPart;
-            const extras = {};
-            for (const e of extraParts) { const [k, v] = e.split('='); if (k && v) extras[k] = decodeURIComponent(v); }
+            const extras = parseExtras(extraParts);
             const items = buckets[key];
             if (!items.length) continue;
-             const { contains, matches } = splitMatches(items);
+            const { contains, matches } = splitMatches(items);
             const conditions = [];
             if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
             if (matches.length) conditions.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
 
+            // Build size condition if provided via extras
+            const sizeCondition = buildSizeCondition(extras);
+
             let body = getActionBody(suffix, ruleName);
             body = body.split('\n').map(l => '  ' + l).join('\n');
 
-            // If extras.from present, require both subject and from conditions
-            if (extras.from) {
-                const fromPatterns = [extras.from];
-                const fm = splitMatches(fromPatterns);
-                const fromConds = [];
-                if (fm.contains.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
-                if (fm.matches.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
-                if (fm.contains.length) fromConds.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
-                if (fm.matches.length) {
-                    const headerMatches = fm.matches.map(m => { const clean = m.substring(1, m.length - 1); return `"*${clean}*"`; });
-                    fromConds.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+            // If extras.from or size present, use allof
+            if (extras.from || sizeCondition) {
+                const allofConditions = [];
+                const subjectBlock = conditions.length > 1 ? `anyof (\n      ${conditions.join(',\n      ')}\n      )` : conditions[0];
+                allofConditions.push(subjectBlock);
+
+                if (extras.from) {
+                    const fromPatterns = [extras.from];
+                    const fm = splitMatches(fromPatterns);
+                    const fromConds = [];
+                    if (fm.contains.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${fm.contains.join(', ')}]`);
+                    if (fm.matches.length) fromConds.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${fm.matches.join(', ')}]`);
+                    if (fm.contains.length) fromConds.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${fm.contains.join(', ')}]`);
+                    if (fm.matches.length) {
+                        const headerMatches = fm.matches.map(m => { const clean = m.substring(1, m.length - 1); return `"*${clean}*"`; });
+                        fromConds.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
+                    }
+                    if (fromConds.length > 0) {
+                        const fromBlock = fromConds.length > 1 ? `anyof (\n      ${fromConds.join(',\n      ')}\n      )` : fromConds[0];
+                        allofConditions.push(fromBlock);
+                    }
                 }
-                const subjectBlock = conditions.join(',\n      ');
-                const fromBlock = fromConds.join(',\n      ');
+
+                if (sizeCondition) {
+                    allofConditions.push(sizeCondition);
+                }
+
                 script += `    # Scoped | Subject | ${suffix}\n`;
-                script += `    if allof (\n      anyof (\n      ${subjectBlock}\n      ),\n      anyof (\n      ${fromBlock}\n      )\n    ) {\n      ${body}\n    }\n\n`;
+                script += `    if allof (\n      ${allofConditions.join(',\n      ')}\n    ) {\n      ${body}\n    }\n\n`;
             } else {
                 const conditionStr = conditions.join(',\n      ');
                 script += `    # Scoped | Subject | ${suffix}\n`;
@@ -1383,50 +1508,37 @@ function generateSieveScript(folderName, buckets) {
             const suffix = mainPart;
             const extras = parseExtras(extraParts);
             const items = buckets[key];
+            if (!items.length) continue;
+            const { contains, matches } = splitMatches(items);
+            const conditions = [];
 
-            // If extras.from exists and items are present, interpret items as Subject -> require both
-            // But skip when items are a single from-token (from-only rule)
-            if (extras.from && items && items.length && !(items.length === 1 && items[0] === extras.from)) {
-                const { contains, matches } = splitMatches(items);
-                const subjectConds = [];
-                if (contains.length) subjectConds.push(`header :comparator "i;unicode-casemap" :contains "Subject" [${contains.join(', ')}]`);
-                if (matches.length) subjectConds.push(`header :comparator "i;unicode-casemap" :matches "Subject" [${matches.join(', ')}]`);
-                if (subjectConds.length === 0) continue;
+            // 1. Check standard "From" header using address test
+            if (contains.length) conditions.push(`address :all :comparator "i;unicode-casemap" :contains "From" [${contains.join(', ')}]`);
+            if (matches.length) conditions.push(`address :all :comparator "i;unicode-casemap" :matches "From" [${matches.join(', ')}]`);
 
-                const fromConds = buildFromConditions([extras.from]);
-                if (fromConds.length === 0) continue;
-
-                let body = getActionBody(suffix, ruleName);
-                body = body.split('\n').map(l => '  ' + l).join('\n');
-
-                const subjectBlock = subjectConds.length > 1 ? `anyof (\n      ${subjectConds.join(',\n      ')}\n    )` : subjectConds[0];
-                const fromBlock = fromConds.length > 1 ? `anyof (\n      ${fromConds.join(',\n      ')}\n    )` : fromConds[0];
-
-                script += `    # Scoped | From+Subject | ${suffix}\n`;
-                script += `    if allof (\n      ${subjectBlock},\n      ${fromBlock}\n    ) {\n      ${body}\n    }\n\n`;
-                continue;
+            // 2. Check "X-Simplelogin-Original-From" as a text header
+            if (contains.length) conditions.push(`header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" [${contains.join(', ')}]`);
+            if (matches.length) {
+                const headerMatches = matches.map(m => {
+                    const clean = m.substring(1, m.length - 1);
+                    return `"*${clean}*"`;
+                });
+                conditions.push(`header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" [${headerMatches.join(', ')}]`);
             }
 
-            // items as from patterns
-            if (items && items.length) {
-                const conditions = buildFromConditions(items);
-                if (conditions.length === 0) continue;
-                let body = getActionBody(suffix, ruleName);
-                body = body.split('\n').map(l => '  ' + l).join('\n');
+            // Build size condition if provided via extras
+            const sizeCondition = buildSizeCondition(extras);
+
+            let body = getActionBody(suffix, ruleName);
+            body = body.split('\n').map(l => '  ' + l).join('\n');
+
+            script += `    # Scoped | From | ${suffix}\n`;
+
+            if (sizeCondition) {
+                const fromBlock = conditions.length > 1 ? `anyof (\n      ${conditions.join(',\n      ')}\n      )` : conditions[0];
+                script += `    if allof (\n      ${fromBlock},\n      ${sizeCondition}\n    ) {\n      ${body}\n    }\n\n`;
+            } else {
                 const conditionStr = conditions.join(',\n      ');
-                script += `    # Scoped | From | ${suffix}\n`;
-                script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
-                continue;
-            }
-
-            // fallback to extras.from
-            if (extras.from) {
-                const fromConds = buildFromConditions([extras.from]);
-                if (fromConds.length === 0) continue;
-                let body = getActionBody(suffix, ruleName);
-                body = body.split('\n').map(l => '  ' + l).join('\n');
-                const conditionStr = fromConds.join(',\n      ');
-                script += `    # Scoped | From | ${suffix}\n`;
                 script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
             }
         }

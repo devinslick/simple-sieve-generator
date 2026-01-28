@@ -1,4 +1,4 @@
-# Generated Sieve Script for test
+# Generated Sieve Script for advanced-rules
 require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
 
 # Generated: Do not run this script on spam messages
@@ -32,4 +32,3 @@ if allof (
   fileinto "label3";
   stop;
 }
-

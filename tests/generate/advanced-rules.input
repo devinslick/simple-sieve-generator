@@ -1,2 +1,7 @@
 #Advanced rules
+#Rule 1 - Assign emails destined for mailbox1 and mailbox1b to label1
+!mailbox1a@,mailbox1b@!F &label1&
+#Rule 2 - assign to the label based on label where the receiving address label is matches mailbox+label@domain.com.
 !*+*@*!F &${2}& ${2}
+#Rule 3 - Assign emails destined to mailbox3 to label3 and stop processing additional rules
+!+mailbox3@!&label3&FS

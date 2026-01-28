@@ -1,4 +1,4 @@
-#From/sender matching rules
+# From/sender matching rules
 # Global | From | auto:F
 ^sender1a@domain.com^ F
 ^sender1b@domain.com^ F
