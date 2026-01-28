@@ -1033,19 +1033,21 @@ function parseRulesList(rawText) {
              matchString = currentLine.substring(first.length).trim();
         }
         
-        // Build key, including any extracted tokens as extras so generator can add corresponding conditions
-        let extras = '';
-        if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
-        if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
-        const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
-        if (!buckets[key]) buckets[key] = [];
-        let item = matchString.trim();
-
         // For from-rules, a standalone wildcard "*" matches everything and is redundant,
         // so treat it as empty to create a from-only rule instead of a from+subject rule
+        let item = matchString.trim();
         if (type === 'from' && item === '*') {
             item = '';
         }
+
+        // Build key, including any extracted tokens as extras so generator can add corresponding conditions
+        // For from-only rules (no subject filter), don't include from in extras so rules can be combined
+        let extras = '';
+        const isFromOnlyRule = type === 'from' && !item;
+        if (fromToken && !isFromOnlyRule) extras += `::from=${encodeURIComponent(fromToken)}`;
+        if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
+        const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
+        if (!buckets[key]) buckets[key] = [];
 
         if (item) {
             buckets[key].push(item);
