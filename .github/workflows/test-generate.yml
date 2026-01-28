@@ -40,6 +40,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Clear wrangler tmp bundle
+        run: |
+          echo "Cleaning .wrangler/tmp to avoid stale bundles"
+          rm -rf .wrangler/tmp || true
+          ls -la .wrangler || true
+
       - name: Start dev server
         run: |
           # Start wrangler dev in background
