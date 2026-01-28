@@ -1,4 +1,4 @@
-# Generated Sieve Script for alias-rules
+# Generated Sieve Script for mailbox-rules
 require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
 
 # Generated: Do not run this script on spam messages
@@ -14,7 +14,7 @@ if allof (
   header :contains "Delivered-To" ["@"],
   header :comparator "i;unicode-casemap" :contains "Subject" ["Subject1", "Subject1 2"]
 ) {
-  fileinto "alias-rules";
+  fileinto "mailbox-rules";
 }
 
 # Aliases (Filtered) | auto:F_R_A_S
@@ -25,7 +25,7 @@ if allof (
 ) {
   addflag "\\Seen";
   fileinto "Archive";
-  fileinto "alias-rules";
+  fileinto "mailbox-rules";
   stop;
 }
 
@@ -36,5 +36,6 @@ if allof (
   header :comparator "i;unicode-casemap" :contains "X-Original-To" ["mailbox1", "mailbox2", "mailbox3"],
   header :contains "Delivered-To" ["@"]
 ) {
-  fileinto "alias-rules";
+  fileinto "mailbox-rules";
 }
+
