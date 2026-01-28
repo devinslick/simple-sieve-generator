@@ -1,0 +1,5 @@
+# Size filter rules for matching messages by size
+F[>1M] Large File Attached
+FR[<100K] Small Notification
+[>500K]FRAS Important Large Document
+^reports@example.com^ [>5M] FR

@@ -1,0 +1,49 @@
+# Generated Sieve Script for size-filter-rules
+require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
+
+# Generated: Do not run this script on spam messages
+if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value "ge" :comparator "i;ascii-numeric" "${1}") {
+    return;
+}
+
+# --- GLOBAL RULES ---
+
+# Global | Subject | auto:F_SZ-over-1-M
+if allof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Large File Attached"],
+  size :over "1M"
+) {
+  fileinto "size-filter-rules";
+}
+
+# Global | Subject | auto:F_R_SZ-under-100-K
+if allof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Small Notification"],
+  size :under "100K"
+) {
+  addflag "\\Seen";
+  fileinto "size-filter-rules";
+}
+
+# Global | Subject | auto:F_R_A_S_SZ-over-500-K
+if allof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Important Large Document"],
+  size :over "500K"
+) {
+  addflag "\\Seen";
+  fileinto "Archive";
+  fileinto "size-filter-rules";
+  stop;
+}
+
+# Global | From | auto:F_R_SZ-over-5-M
+if allof (
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["reports@example.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["reports@example.com"]
+),
+  size :over "5M"
+) {
+  addflag "\\Seen";
+  fileinto "size-filter-rules";
+}
