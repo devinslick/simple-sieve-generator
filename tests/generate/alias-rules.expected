@@ -8,7 +8,7 @@ if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value 
 
 # --- ALIAS RULES (FILTERED) ---
 
-# Aliases (Filtered) | auto:F_R | credit
+# Aliases (Filtered) | auto:F_R
 if allof (
   header :comparator "i;unicode-casemap" :contains "X-Original-To" ["credit"],
   header :contains "Delivered-To" ["@"],
