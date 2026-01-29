@@ -1155,6 +1155,13 @@ function parseRulesList(rawText) {
         if (item) {
             buckets[key].push(item);
             lineProducedRule = true;
+
+            // Warn about suspicious subject patterns that might be mistakes
+            if (item.length <= 2) {
+                warnings.push(`Line ${lineNumber}: Very short subject filter "${item}" - is this intentional?`);
+            } else if (/^[^a-zA-Z0-9]+$/.test(item)) {
+                warnings.push(`Line ${lineNumber}: Subject filter "${item}" contains only special characters - is this intentional?`);
+            }
         } else {
             // If this is a from-type rule with no subject, register the fromToken
             // as the bucket item so the generator will create From-only tests.
