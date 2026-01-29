@@ -1,5 +1,11 @@
 # Size filter rules for matching messages by size
+# Label messages with a total size of 10MB or greater
+[>10M]
+# Label messages with a 1MB+ total size and a subject of "Large File Attached"
 F[>1M] Large File Attached
+# Label and mark messages as read that are under 100KB in total size and a subject of "Small Notification"
 FR[<100K] Small Notification
+# Label messages with a 500KB+ total size and a subject of "Important Large Document" and mark them as read, archive them, and stop processing rules
 [>500K]FRAS Important Large Document
+# Label messages with a 5MB+ total size from reports@example.com and mark them as read
 ^reports@example.com^ [>5M] FR

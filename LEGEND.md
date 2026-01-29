@@ -103,8 +103,6 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 | `[<100K] F Small Email` | **Global Subject + Size**. File messages under 100KB with "Small Email" in subject. |
 | `^reports@company.com^ [>5M] FR` | **Global From + Size**. File+Read large reports (over 5MB) from sender. |
 
-## Invalid/Strict Mode
-Any line that does not start with a valid action code (like `F`) is considered **Invalid** and will be skipped with a warning during the build process. You must be explicit.
 
 ---
 
