@@ -1,4 +1,4 @@
-# Generated Sieve Script for Test
+# Generated Sieve Script for advanced-rules
 require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
 
 # Generated: Do not run this script on spam messages
@@ -40,6 +40,6 @@ if allof (
   header :contains "Delivered-To" ["@"]
 ) {
   addflag "\\Seen";
-  fileinto "Test";
+  fileinto "advanced-rules";
 }
 
