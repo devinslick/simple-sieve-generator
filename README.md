@@ -60,13 +60,21 @@ The project includes a test framework for the `/generate` endpoint.
 - `--filter=NAME` - Run only tests matching NAME
 - `--update-expected` - Update expected output files with actual results
 
-**Adding new tests:**
-1. Add a test definition to `tests/generate/test-config.json`
-2. Create an input file with DSL rules (e.g., `my-test.input`)
-3. Run `npm run test:generate -- --update-expected --filter=my-test` to generate expected output
-4. Review the generated `.expected` file for correctness
+**Adding new tests (autodiscovered):**
+1. Create an input file in `tests/generate` named `<test-name>.input` containing your DSL rules. The first non-empty line is used as the test description if it starts with `#`.
+2. If desired, create an accompanying `<test-name>.expected` file to assert the generated Sieve output; otherwise run with `--update-expected` to generate it.
+3. Run the test runner:
+   ```bash
+   npm run test:generate
+   # or target a single test:
+   npm run test:generate -- --filter=my-test
+   ```
+4. To update expected outputs from the runner use:
+   ```bash
+   npm run test:generate -- --update-expected
+   ```
 
-See `tests/README.md` for more details.
+See `tests/generate/` for example `.input` and `.expected` files demonstrating supported DSL patterns.
 
 ### Configuration & Deployment
 

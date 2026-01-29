@@ -105,3 +105,7 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 
 ## Invalid/Strict Mode
 Any line that does not start with a valid action code (like `F`) is considered **Invalid** and will be skipped with a warning during the build process. You must be explicit.
+
+---
+
+For additional examples and full test cases showing supported DSL patterns, see the test fixtures in `tests/generate` (example input files and expected outputs).
