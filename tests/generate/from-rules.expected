@@ -8,6 +8,47 @@ if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value 
 
 # --- GLOBAL RULES ---
 
+# Global | Subject | auto:F_R
+if allof (
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Subject 2 Match*"],
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender3b@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender3b@domain.com"]
+)
+) {
+  addflag "\\Seen";
+  fileinto "from-rules";
+}
+
+# Global | Subject | auto:F_R_A_S
+if allof (
+  anyof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Subject1"],
+  header :comparator "i;unicode-casemap" :matches "Subject" ["*Subject 2 Match*"]
+),
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender4a@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender4a@domain.com"]
+)
+) {
+  addflag "\\Seen";
+  fileinto "Archive";
+  fileinto "from-rules";
+  stop;
+}
+
+# Global | Subject | auto:B
+if allof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Subject Filter"],
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["sender7@domain.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender7@domain.com"]
+)
+) {
+  reject "Message Rejected";
+  stop;
+}
+
 # Global | From | auto:F
 if anyof (
   address :all :comparator "i;unicode-casemap" :contains "From" ["sender1a@domain.com", "sender1b@domain.com"],
@@ -22,26 +63,6 @@ if anyof (
   header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["sender2a@domain.com", "sender2b@domain.com"]
 ) {
   addflag "\\Seen";
-  fileinto "from-rules";
-}
-
-# Global | From | auto:F_R::from=sender3b%40domain.com
-if anyof (
-  address :all :comparator "i;unicode-casemap" :matches "From" ["*Subject 2 Match*"],
-  header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" ["**Subject 2 Match**"]
-) {
-  fileinto "from-rules";
-}
-
-# Global | From | auto:F_R_A_S::from=sender4a%40domain.com
-if anyof (
-  address :all :comparator "i;unicode-casemap" :contains "From" ["Subject1"],
-  address :all :comparator "i;unicode-casemap" :matches "From" ["*Subject 2 Match*"],
-  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["Subject1"],
-  header :comparator "i;unicode-casemap" :matches "X-Simplelogin-Original-From" ["**Subject 2 Match**"]
-) {
-  addflag "\\Seen";
-  fileinto "Archive";
   fileinto "from-rules";
 }
 
@@ -64,12 +85,3 @@ if anyof (
   reject "Message Rejected";
   stop;
 }
-
-# Global | From | auto:B::from=sender7%40domain.com
-if anyof (
-  address :all :comparator "i;unicode-casemap" :contains "From" ["Subject Filter"],
-  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["Subject Filter"]
-) {
-  
-}
-

@@ -32,6 +32,8 @@ A combination of characters that determine what happens when the pattern matches
 | `&label&` | **label** | Set the label for messages matching this rule. Defaults to the name of the rule list. |
 | `B` | **Bounce** | Rejects the message with an error. |
 | `x[N][u]` | **Expire** | Sets expiration. `x1`=1 day. `x6h`=6 hours. `x30d`=30 days. |
+| `[>SIZE]` | **Size Over** | Match messages larger than SIZE. E.g., `[>100K]`, `[>1M]`, `[>5G]`. |
+| `[<SIZE]` | **Size Under** | Match messages smaller than SIZE. E.g., `[<100K]`, `[<1M]`. |
 
 #### Supported Combinations (Buckets)
 
@@ -97,6 +99,13 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 | `Fx1 Temporary Code` | **Global Subject**. Moves to folder, sets **Expire in 1 day**. |
 | `Fx4h One Time Pass` | **Global Subject**. Moves to folder, sets **Expire in 4 hours**. |
 | `F *Verification*` | **Global Subject**. Uses `:matches` because of wildcards. |
+| `[>1M] FR Large Attachment` | **Global Subject + Size**. File+Read messages over 1MB with "Large Attachment" in subject. |
+| `[<100K] F Small Email` | **Global Subject + Size**. File messages under 100KB with "Small Email" in subject. |
+| `^reports@company.com^ [>5M] FR` | **Global From + Size**. File+Read large reports (over 5MB) from sender. |
 
 ## Invalid/Strict Mode
 Any line that does not start with a valid action code (like `F`) is considered **Invalid** and will be skipped with a warning during the build process. You must be explicit.
+
+---
+
+For additional examples and full test cases showing supported DSL patterns, see the test fixtures in `tests/generate` (example input files and expected outputs).

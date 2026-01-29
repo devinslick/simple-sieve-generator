@@ -33,3 +33,13 @@ if allof (
   stop;
 }
 
+# Aliases | auto:F_R_SZ-over-100-K
+if allof (
+  size :over "100K",
+  header :comparator "i;unicode-casemap" :contains "X-Original-To" ["+mailbox4@"],
+  header :contains "Delivered-To" ["@"]
+) {
+  addflag "\\Seen";
+  fileinto "advanced-rules";
+}
+
