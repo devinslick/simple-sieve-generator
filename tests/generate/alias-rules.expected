@@ -1,0 +1,41 @@
+# Generated Sieve Script for alias-rules
+require ["include", "environment", "variables", "relational", "comparator-i;ascii-numeric", "spamtest", "fileinto", "imap4flags", "vnd.proton.expire", "extlists", "reject"];
+
+# Generated: Do not run this script on spam messages
+if allof (environment :matches "vnd.proton.spam-threshold" "*", spamtest :value "ge" :comparator "i;ascii-numeric" "${1}") {
+    return;
+}
+
+# --- ALIAS RULES (FILTERED) ---
+
+# Aliases (Filtered) | auto:F_R
+if allof (
+  header :comparator "i;unicode-casemap" :contains "X-Original-To" ["credit"],
+  header :contains "Delivered-To" ["@"],
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Order Confirmation"]
+) {
+  addflag "\\Seen";
+  fileinto "alias-rules";
+}
+
+# --- ALIAS RULES (GENERIC) ---
+
+# Aliases | auto:F_R_A_S
+if allof (
+  header :comparator "i;unicode-casemap" :contains "X-Original-To" ["auto", "receipts"],
+  header :contains "Delivered-To" ["@"]
+) {
+  addflag "\\Seen";
+  fileinto "Archive";
+  fileinto "alias-rules";
+  stop;
+}
+
+# Aliases | auto:F
+if allof (
+  header :comparator "i;unicode-casemap" :contains "X-Original-To" ["newsletters"],
+  header :contains "Delivered-To" ["@"]
+) {
+  fileinto "alias-rules";
+}
+
