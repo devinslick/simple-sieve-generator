@@ -1112,9 +1112,12 @@ function parseRulesList(rawText) {
         // from-only rules -> type='from', items are from patterns
         // from+subject rules -> type='subject', from goes in extras
         // subject-only rules -> type='subject'
+        // size-only rules -> type='size' (no from, no subject, just size filter)
         let type = 'subject';
         if (fromToken && !item) {
             type = 'from';
+        } else if (sizeToken && !item && !fromToken) {
+            type = 'size';
         }
 
         // Build key, including any extracted tokens as extras so generator can add corresponding conditions
@@ -1134,6 +1137,11 @@ function parseRulesList(rawText) {
             // as the bucket item so the generator will create From-only tests.
             if (type === 'from' && fromToken) {
                 buckets[key].push(fromToken);
+            }
+            // If this is a size-only rule, push a placeholder so the bucket isn't empty.
+            // The generator will create rules that only check size.
+            else if (type === 'size' && sizeToken) {
+                buckets[key].push('__SIZE_ONLY__');
             }
         }
     }
@@ -1183,7 +1191,7 @@ function generateSieveScript(folderName, buckets) {
     const buildSizeCondition = (extras) => {
         if (!extras.size) return null;
         const { op, val, unit } = extras.size;
-        return `size :${op} "${val}${unit}"`;
+        return `size :${op} ${val}${unit}`;
     };
 
     const buildFromConditions = (patterns) => {
@@ -1343,8 +1351,9 @@ function generateSieveScript(folderName, buckets) {
     // --- GLOBAL ---
     const globalSubjectKeys = Object.keys(buckets).filter(k => k.startsWith('global-subject-'));
     const globalFromKeys = Object.keys(buckets).filter(k => k.startsWith('global-from-'));
-    
-    if (globalSubjectKeys.length || globalFromKeys.length) {
+    const globalSizeKeys = Object.keys(buckets).filter(k => k.startsWith('global-size-'));
+
+    if (globalSubjectKeys.length || globalFromKeys.length || globalSizeKeys.length) {
         script += `# --- GLOBAL RULES ---\n\n`;
         for (const key of globalSubjectKeys) {
             const part = key.substring('global-subject-'.length);
@@ -1437,13 +1446,31 @@ function generateSieveScript(folderName, buckets) {
                 script += `if anyof (\n  ${conditions.join(',\n  ')}\n) {\n  ${body}\n}\n\n`;
             }
         }
+        // Handle size-only rules (no subject, no from, just size filter)
+        for (const key of globalSizeKeys) {
+            const part = key.substring('global-size-'.length);
+            const [mainPart, ...extraParts] = part.split('::');
+            const suffix = mainPart;
+            const extras = parseExtras(extraParts);
+            const items = buckets[key];
+            if (!items.length) continue;
+
+            // Build size condition - this is required for size-only rules
+            const sizeCondition = buildSizeCondition(extras);
+            if (!sizeCondition) continue;
+
+            let body = getActionBody(suffix, ruleName);
+            script += `# Global | Size | ${suffix}\n`;
+            script += `if ${sizeCondition} {\n  ${body}\n}\n\n`;
+        }
     }
-    
+
     // --- SCOPED ---
     const scopedSubjectKeys = Object.keys(buckets).filter(k => k.startsWith('scoped-subject-'));
     const scopedFromKeys = Object.keys(buckets).filter(k => k.startsWith('scoped-from-'));
-    
-    if (scopedSubjectKeys.length || scopedFromKeys.length) {
+    const scopedSizeKeys = Object.keys(buckets).filter(k => k.startsWith('scoped-size-'));
+
+    if (scopedSubjectKeys.length || scopedFromKeys.length || scopedSizeKeys.length) {
         script += `# --- SCOPED RULES ---\n`;
         script += `# Applies only when delivered to: ${ruleNameLower}...\n`;
         script += `if header :contains "X-Original-To" "${ruleNameLower}" {\n\n`;
@@ -1541,6 +1568,26 @@ function generateSieveScript(folderName, buckets) {
                 const conditionStr = conditions.join(',\n      ');
                 script += `    if anyof (\n      ${conditionStr}\n    ) {\n      ${body}\n    }\n\n`;
             }
+        }
+
+        // Handle size-only rules (no subject, no from, just size filter)
+        for (const key of scopedSizeKeys) {
+            const part = key.substring('scoped-size-'.length);
+            const [mainPart, ...extraParts] = part.split('::');
+            const suffix = mainPart;
+            const extras = parseExtras(extraParts);
+            const items = buckets[key];
+            if (!items.length) continue;
+
+            // Build size condition - this is required for size-only rules
+            const sizeCondition = buildSizeCondition(extras);
+            if (!sizeCondition) continue;
+
+            let body = getActionBody(suffix, ruleName);
+            body = body.split('\n').map(l => '  ' + l).join('\n');
+
+            script += `    # Scoped | Size | ${suffix}\n`;
+            script += `    if ${sizeCondition} {\n      ${body}\n    }\n\n`;
         }
         script += `}\n`;
     }
