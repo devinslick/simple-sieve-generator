@@ -91,6 +91,9 @@ app.get('/', (c) => {
             font-family: monospace;
             resize: vertical;
           }
+          #genOutput {
+            min-height: 400px;
+          }
           
           /* Buttons */
           button { 
@@ -345,21 +348,29 @@ app.get('/', (c) => {
             async function generateScript() {
                 const folderName = document.getElementById('folderName').value;
                 const rulesInput = document.getElementById('rulesInput').value;
-                
+
                 try {
                     const response = await fetch('/generate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ folderName, rulesInput })
                     });
-            
+
                     if (!response.ok) throw new Error(await response.text());
-            
+
                     const data = await response.json();
                     document.getElementById('genOutput').value = data.script;
-                    document.getElementById('genLogs').innerText = 'Generation successful!';
+                    console.log('Generate response warnings:', data.warnings);
+
+                    // Display warnings/errors if any, otherwise show success
+                    const logsEl = document.getElementById('genLogs');
+                    if (data.warnings && data.warnings.length > 0) {
+                        logsEl.innerHTML = '<span style="color: var(--warning);">Generation completed with warnings:</span><br>' + data.warnings.join('<br>');
+                    } else {
+                        logsEl.innerText = 'Generation successful!';
+                    }
                 } catch (e) {
-                    document.getElementById('genLogs').innerText = 'Error: ' + e.message;
+                    document.getElementById('genLogs').innerHTML = '<span style="color: var(--danger);">Error:</span> ' + e.message;
                     console.error(e);
                 }
             }
@@ -751,9 +762,9 @@ app.get('/legend', async (c) => {
 
 app.post('/generate', async (c) => {
     const { folderName, rulesInput } = await c.req.json();
-    const buckets = parseRulesList(rulesInput);
-    const script = generateSieveScript(folderName, buckets);
-    return c.json({ script });
+    const { buckets, warnings: parserWarnings } = parseRulesList(rulesInput);
+    const { script, warnings } = generateSieveScript(folderName, buckets, parserWarnings);
+    return c.json({ script, warnings });
 });
 
 // --- Logic ---
@@ -889,16 +900,23 @@ function canonicalSuffix(dsl) {
 
 function parseRulesList(rawText) {
     const lines = rawText.split('\n');
-    
-    const context = {
-        scope: 'global', 
-    };
-    
-    const buckets = {};
 
+    const context = {
+        scope: 'global',
+    };
+
+    const buckets = {};
+    const warnings = [];
+
+    let lineNumber = 0;
     for (let line of lines) {
+        lineNumber++;
+        const originalLine = line;
         line = line.trim();
         if (!line || line.startsWith('#')) continue;
+
+        // Track if this line produced a valid rule
+        let lineProducedRule = false;
 
         // New DSL tokens (preferred): extract ^from^, &label&, and [>SIZE]/[<SIZE] tokens anywhere in the line
         let fromToken = null;
@@ -930,6 +948,10 @@ function parseRulesList(rawText) {
         let aliasMatch = line.match(/^!([^!]+)!(.*)$/);
         if (aliasMatch) {
              const aliases = aliasMatch[1].split(',').map(s => s.trim()).filter(s => s);
+             if (aliases.length === 0) {
+                 warnings.push(`Line ${lineNumber}: Empty alias list in "!...!" syntax`);
+                 continue;
+             }
              let rest = aliasMatch[2].trim();
              
              // Now parse 'rest' for code + args.
@@ -1132,11 +1154,26 @@ function parseRulesList(rawText) {
 
         if (item) {
             buckets[key].push(item);
+            lineProducedRule = true;
+
+            // Warn about suspicious subject patterns that might be mistakes
+            if (item.length <= 2) {
+                warnings.push(`Line ${lineNumber}: Very short subject filter "${item}" - is this intentional?`);
+            } else if (/^[^a-zA-Z0-9]+$/.test(item)) {
+                warnings.push(`Line ${lineNumber}: Subject filter "${item}" contains only special characters - is this intentional?`);
+            }
         } else {
             // If this is a from-type rule with no subject, register the fromToken
             // as the bucket item so the generator will create From-only tests.
             if (type === 'from' && fromToken) {
                 buckets[key].push(fromToken);
+                lineProducedRule = true;
+            }
+            // If this is a size-only rule, push a placeholder so the bucket isn't empty.
+            // The generator will create rules that only check size.
+            else if (type === 'size' && sizeToken) {
+                buckets[key].push('__SIZE_ONLY__');
+                lineProducedRule = true;
             }
             // If this is a size-only rule, push a placeholder so the bucket isn't empty.
             // The generator will create rules that only check size.
@@ -1144,12 +1181,18 @@ function parseRulesList(rawText) {
                 buckets[key].push('__SIZE_ONLY__');
             }
         }
+
+        // Warn if line didn't produce any rule
+        if (!lineProducedRule && !fromToken && !sizeToken && !labelToken) {
+            warnings.push(`Line ${lineNumber}: Could not parse rule from "${originalLine.trim().substring(0, 50)}${originalLine.trim().length > 50 ? '...' : ''}"`);
+        }
     }
-    
-    return buckets;
+
+    return { buckets, warnings };
 }
 
-function generateSieveScript(folderName, buckets) {
+function generateSieveScript(folderName, buckets, parserWarnings = []) {
+    const warnings = [...parserWarnings];
     const ruleName = folderName.trim() || "Default";
     const ruleNameLower = ruleName.toLowerCase();
     
@@ -1591,8 +1634,14 @@ function generateSieveScript(folderName, buckets) {
         }
         script += `}\n`;
     }
-    
-    return script;
+
+    // Add warning if no rules were generated
+    const bucketKeys = Object.keys(buckets);
+    if (bucketKeys.length === 0) {
+        warnings.push('Warning: No rules were generated. Check your input syntax.');
+    }
+
+    return { script, warnings };
 }
 
 // Deprecated: mapCodeToSuffix (Functionality moved to canonicalSuffix)
