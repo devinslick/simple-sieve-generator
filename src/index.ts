@@ -360,11 +360,12 @@ app.get('/', (c) => {
 
                     const data = await response.json();
                     document.getElementById('genOutput').value = data.script;
+                    console.log('Generate response warnings:', data.warnings);
 
                     // Display warnings/errors if any, otherwise show success
                     const logsEl = document.getElementById('genLogs');
                     if (data.warnings && data.warnings.length > 0) {
-                        logsEl.innerHTML = '<span style="color: var(--warning);">Generation completed with warnings:</span>\\n' + data.warnings.join('\\n');
+                        logsEl.innerHTML = '<span style="color: var(--warning);">Generation completed with warnings:</span><br>' + data.warnings.join('<br>');
                     } else {
                         logsEl.innerText = 'Generation successful!';
                     }
