@@ -9,3 +9,9 @@ FR[<100K] Small Notification
 [>500K]FRAS Important Large Document
 # Label messages with a 5MB+ total size from reports@example.com and mark them as read
 ^reports@example.com^ [>5M] FR
+# Match any message with an attachment
+[*] FR
+# Match any message with an attachment and "Photo" in subject
+[] F Photo
+# Match messages from sender with any attachment
+^images@example.com^ [*] FR
