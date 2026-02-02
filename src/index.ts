@@ -1225,11 +1225,6 @@ function parseRulesList(rawText) {
                 buckets[key].push('__SIZE_ONLY__');
                 lineProducedRule = true;
             }
-            // If this is a size-only rule, push a placeholder so the bucket isn't empty.
-            // The generator will create rules that only check size.
-            else if (type === 'size' && sizeToken) {
-                buckets[key].push('__SIZE_ONLY__');
-            }
         }
 
         // Warn if line didn't produce any rule
