@@ -36,6 +36,14 @@ if allof (
   stop;
 }
 
+# Global | Subject | auto:F_SZ-any-attachment
+if allof (
+  header :comparator "i;unicode-casemap" :contains "Subject" ["Photo"],
+  header :contains "X-Attached" ""
+) {
+  fileinto "size-filter-rules";
+}
+
 # Global | From | auto:F_R_SZ-over-5-M
 if allof (
   anyof (
@@ -48,8 +56,26 @@ if allof (
   fileinto "size-filter-rules";
 }
 
+# Global | From | auto:F_R_SZ-any-attachment
+if allof (
+  anyof (
+  address :all :comparator "i;unicode-casemap" :contains "From" ["images@example.com"],
+  header :comparator "i;unicode-casemap" :contains "X-Simplelogin-Original-From" ["images@example.com"]
+),
+  header :contains "X-Attached" ""
+) {
+  addflag "\\Seen";
+  fileinto "size-filter-rules";
+}
+
 # Global | Size | auto:F_SZ-over-10-M
 if size :over 10M {
+  fileinto "size-filter-rules";
+}
+
+# Global | Size | auto:F_R_SZ-any-attachment
+if header :contains "X-Attached" "" {
+  addflag "\\Seen";
   fileinto "size-filter-rules";
 }
 

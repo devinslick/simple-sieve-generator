@@ -789,14 +789,25 @@ function parseDSL(token) {
 
     // Extract size filter: [>100K] or [<100K]
     // Supports K, M, G units (case-insensitive)
-    const sizeMatch = temp.match(/\[([><])(\d+)([KMGkmg])\]/);
-    if (sizeMatch) {
+    // Also supports [] or [*] for "any attachment" (checks X-Attached header)
+    const anyAttachMatch = temp.match(/\[\*?\]/);
+    if (anyAttachMatch) {
         sizeRaw = {
-            op: sizeMatch[1] === '>' ? 'over' : 'under',
-            val: sizeMatch[2],
-            unit: sizeMatch[3].toUpperCase()
+            op: 'any-attachment',
+            val: null,
+            unit: null
         };
-        temp = temp.replace(sizeMatch[0], '');
+        temp = temp.replace(anyAttachMatch[0], '');
+    } else {
+        const sizeMatch = temp.match(/\[([><])(\d+)([KMGkmg])\]/);
+        if (sizeMatch) {
+            sizeRaw = {
+                op: sizeMatch[1] === '>' ? 'over' : 'under',
+                val: sizeMatch[2],
+                unit: sizeMatch[3].toUpperCase()
+            };
+            temp = temp.replace(sizeMatch[0], '');
+        }
     }
 
     // Extract expiration: xN[dh]
@@ -887,9 +898,13 @@ function canonicalSuffix(dsl) {
         parts.push(`L-${dsl.label}`);
     }
 
-    // Size filter: encode as SZ-over-100-K or SZ-under-1-M
+    // Size filter: encode as SZ-over-100-K, SZ-under-1-M, or SZ-any-attachment
     if (dsl.size) {
-        parts.push(`SZ-${dsl.size.op}-${dsl.size.val}-${dsl.size.unit}`);
+        if (dsl.size.op === 'any-attachment') {
+            parts.push('SZ-any-attachment');
+        } else {
+            parts.push(`SZ-${dsl.size.op}-${dsl.size.val}-${dsl.size.unit}`);
+        }
     }
 
     if (parts.length === 0) return 'default'; // Should match explicit "F"? No F is flag.
@@ -933,14 +948,25 @@ function parseRulesList(rawText) {
             line = line.replace(labelRe[0], '').trim();
         }
         // Extract size filter token: [>100K] or [<100K]
-        const sizeRe = line.match(/\[([><])(\d+)([KMGkmg])\]/);
-        if (sizeRe) {
+        // Also supports [] or [*] for "any attachment" (checks X-Attached header)
+        const anyAttachRe = line.match(/\[\*?\]/);
+        if (anyAttachRe) {
             sizeToken = {
-                op: sizeRe[1] === '>' ? 'over' : 'under',
-                val: sizeRe[2],
-                unit: sizeRe[3].toUpperCase()
+                op: 'any-attachment',
+                val: null,
+                unit: null
             };
-            line = line.replace(sizeRe[0], '').trim();
+            line = line.replace(anyAttachRe[0], '').trim();
+        } else {
+            const sizeRe = line.match(/\[([><])(\d+)([KMGkmg])\]/);
+            if (sizeRe) {
+                sizeToken = {
+                    op: sizeRe[1] === '>' ? 'over' : 'under',
+                    val: sizeRe[2],
+                    unit: sizeRe[3].toUpperCase()
+                };
+                line = line.replace(sizeRe[0], '').trim();
+            }
         }
 
         // Alias Logic
@@ -984,10 +1010,16 @@ function parseRulesList(rawText) {
                  if (l) { labelToken = l[1].trim(); rest = rest.replace(l[0], '').trim(); }
              }
              if (!sizeToken) {
-                 const sz = rest.match(/\[([><])(\d+)([KMGkmg])\]/);
-                 if (sz) {
-                     sizeToken = { op: sz[1] === '>' ? 'over' : 'under', val: sz[2], unit: sz[3].toUpperCase() };
-                     rest = rest.replace(sz[0], '').trim();
+                 const anyAttach = rest.match(/\[\*?\]/);
+                 if (anyAttach) {
+                     sizeToken = { op: 'any-attachment', val: null, unit: null };
+                     rest = rest.replace(anyAttach[0], '').trim();
+                 } else {
+                     const sz = rest.match(/\[([><])(\d+)([KMGkmg])\]/);
+                     if (sz) {
+                         sizeToken = { op: sz[1] === '>' ? 'over' : 'under', val: sz[2], unit: sz[3].toUpperCase() };
+                         rest = rest.replace(sz[0], '').trim();
+                     }
                  }
              }
 
@@ -1036,7 +1068,13 @@ function parseRulesList(rawText) {
                  let extras = '';
                  if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
                  if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
-                 if (sizeToken) extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
+                 if (sizeToken) {
+                     if (sizeToken.op === 'any-attachment') {
+                         extras += `::size=any-attachment`;
+                     } else {
+                         extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
+                     }
+                 }
                  const key = `aliases-filtered:${suffix}${extras}`;
                  if (!buckets[key]) buckets[key] = [];
                  // Store both aliases and filter so they can be combined across different alias sets
@@ -1045,7 +1083,13 @@ function parseRulesList(rawText) {
                  let extras = '';
                  if (fromToken) extras += `::from=${encodeURIComponent(fromToken)}`;
                  if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
-                 if (sizeToken) extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
+                 if (sizeToken) {
+                     if (sizeToken.op === 'any-attachment') {
+                         extras += `::size=any-attachment`;
+                     } else {
+                         extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
+                     }
+                 }
                  const key = 'aliases:' + suffix + extras;
                  if (!buckets[key]) buckets[key] = [];
                  buckets[key].push(...aliases);
@@ -1148,7 +1192,13 @@ function parseRulesList(rawText) {
         let extras = '';
         if (fromToken && type === 'subject') extras += `::from=${encodeURIComponent(fromToken)}`;
         if (labelToken) extras += `::label=${encodeURIComponent(labelToken)}`;
-        if (sizeToken) extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
+        if (sizeToken) {
+            if (sizeToken.op === 'any-attachment') {
+                extras += `::size=any-attachment`;
+            } else {
+                extras += `::size=${sizeToken.op}-${sizeToken.val}-${sizeToken.unit}`;
+            }
+        }
         const key = `${currentScope}-${type}-${bucketSuffix}${extras}`;
         if (!buckets[key]) buckets[key] = [];
 
@@ -1219,9 +1269,13 @@ function generateSieveScript(folderName, buckets, parserWarnings = []) {
             const [k, v] = e.split('=');
             if (k && v) {
                 if (k === 'size') {
-                    // size is in format: over-100-K or under-1-M
-                    const [op, val, unit] = v.split('-');
-                    extras.size = { op, val, unit };
+                    // size is in format: over-100-K, under-1-M, or any-attachment
+                    if (v === 'any-attachment') {
+                        extras.size = { op: 'any-attachment', val: null, unit: null };
+                    } else {
+                        const [op, val, unit] = v.split('-');
+                        extras.size = { op, val, unit };
+                    }
                 } else {
                     extras[k] = decodeURIComponent(v);
                 }
@@ -1230,10 +1284,14 @@ function generateSieveScript(folderName, buckets, parserWarnings = []) {
         return extras;
     };
 
-    // Helper to build a size condition from extras
+    // Helper to build a size/attachment condition from extras
     const buildSizeCondition = (extras) => {
         if (!extras.size) return null;
         const { op, val, unit } = extras.size;
+        // For any-attachment, check for X-Attached header existence
+        if (op === 'any-attachment') {
+            return `header :contains "X-Attached" ""`;
+        }
         return `size :${op} ${val}${unit}`;
     };
 

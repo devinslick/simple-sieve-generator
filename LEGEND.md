@@ -32,7 +32,8 @@ A combination of characters that determine what happens when the pattern matches
 | `&label&` | **label** | Set the label for messages matching this rule. Defaults to the name of the rule list. |
 | `B` | **Bounce** | Rejects the message with an error. |
 | `x[N][u]` | **Expire** | Sets expiration. `x1`=1 day. `x6h`=6 hours. `x30d`=30 days. |
-| `[>SIZE]` | **Size Over** | Match messages larger than SIZE. E.g., `[>100K]`, `[>1M]`, `[>5G]`. |
+| `[*]` or `[]` | **Any Attachment** | Match messages with any attachment (checks X-Attached header). |
+| `[>SIZE]` | **Size Over** | Match messages larger than SIZE. E.g., `[>100K]`, `[>2M]`, `[>5G]`. |
 | `[<SIZE]` | **Size Under** | Match messages smaller than SIZE. E.g., `[<100K]`, `[<1M]`. |
 
 #### Supported Combinations (Buckets)
@@ -99,9 +100,13 @@ Use the `&...&` token to explicitly designate a label/folder for the rule to fil
 | `Fx1 Temporary Code` | **Global Subject**. Moves to folder, sets **Expire in 1 day**. |
 | `Fx4h One Time Pass` | **Global Subject**. Moves to folder, sets **Expire in 4 hours**. |
 | `F *Verification*` | **Global Subject**. Uses `:matches` because of wildcards. |
-| `[>1M] FR Large Attachment` | **Global Subject + Size**. File+Read messages over 1MB with "Large Attachment" in subject. |
+| `[*] FR` | **Global Attachment**. File+Read any message with an attachment. |
+| `[] F Photo` | **Global Subject + Attachment**. File messages with an attachment and "Photo" in subject. |
+| `[>100K] FR Large Attachment` | **Global Subject + Size**. File+Read messages over 100KB with "Large Attachment" in subject. |
+| `[>2M] FR` | **Global Size**. File+Read messages over 2MB. |
 | `[<100K] F Small Email` | **Global Subject + Size**. File messages under 100KB with "Small Email" in subject. |
 | `^reports@company.com^ [>5M] FR` | **Global From + Size**. File+Read large reports (over 5MB) from sender. |
+| `^sender@example.com^ [*] FR` | **Global From + Attachment**. File+Read any message with attachment from sender. |
 
 
 ---
